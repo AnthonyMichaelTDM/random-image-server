@@ -1,0 +1,88 @@
+# This checks formatting, runs tests, and builds the project.
+
+name: Continuous Integration
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "full"
+  CI: true
+
+concurrency:
+  group: CI-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Run format separately.
+  #
+  # This will fast-cancel other CI early if this fails.
+  #
+  # `cargo fmt` checks _all_ code, regardless of the OS
+  # or any `#[cfg]`'s, so this only needs to run on Linux.
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Format
+        run: cargo fmt --check --all
+
+  # Runs cargo machete, which checks for unused dependencies.
+  machete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Machete
+        uses: bnjbvr/cargo-machete@main
+
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up mold linker
+        uses: rui314/setup-mold@v1
+
+      - name: Install Rust toolchain
+        run: |
+          rustup show
+          rustup -V
+          rustup set profile minimal
+          rustup toolchain install stable
+          rustup override set stable
+
+      - name: Setup cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
+
+      - name: Run tests
+        run: cargo nextest run --profile ci
+
+      - name: Upload test results to Codecov
+        if: always()
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: target/nextest/ci/junit.xml
+
+      - name: Build
+        run: cargo check
+
+      - name: Build
+        run: cargo check --all-features

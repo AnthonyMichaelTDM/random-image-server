@@ -1,0 +1,18 @@
+[package]
+name = "random-image-server"
+version = "0.1.0"
+edition = "2024"
+authors = [
+    "Anthony Rubick <68485672+AnthonyMichaelTDM@users.noreply.github.com>",
+]
+description = "A simple image server that serves random images from a preconfigured list of paths and URLs."
+repository = "https://github.com/AnthonyMichaelTDM/random-image-server"
+license = "GPL-3.0-or-later"
+readme = "README.md"
+
+[dependencies]
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
