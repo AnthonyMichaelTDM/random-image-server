@@ -1,4 +1,8 @@
-use random_image_server::{ImageServer, config::Config};
+use random_image_server::{
+    ImageServer,
+    config::Config,
+    termination::{Interrupted, create_termination},
+};
 
 use anyhow::Result;
 
@@ -39,7 +43,26 @@ async fn main() -> Result<()> {
 
     // Create and start the server
     let server = ImageServer::with_config(config);
-    server.start().await?;
+
+    // Create a termination handler to gracefully shut down the server
+    let (_terminator, mut interrupt_rx) = create_termination();
+
+    if let Err(e) = server.start(interrupt_rx.resubscribe()).await {
+        log::error!("Server encountered an unexpected error: {}", e);
+        return Err(e);
+    }
+
+    // Wait for termination signal
+    if let Ok(reason) = interrupt_rx.recv().await {
+        match reason {
+            Interrupted::UserInt => log::info!("exited per user request"),
+            Interrupted::OsSigInt => log::info!("exited because of an os sig int"),
+            Interrupted::OsSigTerm => log::info!("exited because of an os sig term"),
+            Interrupted::OsSigQuit => log::info!("exited because of an os sig quit"),
+        }
+    } else {
+        log::error!("exited because of an unexpected error");
+    }
 
     Ok(())
 }

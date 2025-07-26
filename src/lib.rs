@@ -12,16 +12,19 @@ use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
+use tokio::sync::broadcast::Receiver;
 use url::Url;
 
 use crate::config::{Config, ImageSource};
 use crate::state::ServerState;
+use crate::termination::Interrupted;
 
 pub mod cache;
 pub mod config;
 mod logging;
 pub mod state;
 pub use logging::init_logging;
+pub mod termination;
 
 pub const ALLOWED_IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png"];
 
@@ -43,8 +46,8 @@ impl ImageServer {
     /// Create a new ImageServer instance with custom configuration
     pub fn with_config(config: Config) -> Self {
         Self {
+            state: Arc::new(RwLock::new(ServerState::with_config(&config))),
             config,
-            state: Arc::new(RwLock::new(ServerState::default())),
         }
     }
 
@@ -58,15 +61,11 @@ impl ImageServer {
             match source {
                 ImageSource::Url(url) => {
                     log::info!("Loading image from URL: {}", url);
+                    let key = cache::CacheKey::ImageUrl(url.clone());
                     // fetch the image from the URL and store it in the cache
                     match read_image_from_url(url).await {
                         Ok(image) => {
-                            if let Err(err) = self
-                                .state
-                                .write()
-                                .await
-                                .cache
-                                .set(cache::CacheKey::ImageUrl(url.clone()), image)
+                            if let Err(err) = self.state.write().await.cache.set(key.clone(), image)
                             {
                                 log::error!("Failed to store image in cache: {}", err);
                             }
@@ -87,13 +86,8 @@ impl ImageServer {
                         log::info!("Loading image from file path: {}", path.display());
                         // read the image file from the path and store it in the cache
                         let image = read_image_from_path(&path).expect("Failed to read image file");
-                        if let Err(err) = self
-                            .state
-                            .write()
-                            .await
-                            .cache
-                            .set(cache::CacheKey::ImagePath(path.clone()), image)
-                        {
+                        let key = cache::CacheKey::ImagePath(path.clone());
+                        if let Err(err) = self.state.write().await.cache.set(key, image) {
                             log::error!("Failed to store image in cache: {}", err);
                         }
                     } else {
@@ -125,13 +119,8 @@ impl ImageServer {
                         // read the image file and store it in the cache
                         match read_image_from_path(&path) {
                             Ok(image) => {
-                                if let Err(err) = self
-                                    .state
-                                    .write()
-                                    .await
-                                    .cache
-                                    .set(cache::CacheKey::ImagePath(path.clone()), image)
-                                {
+                                let key = cache::CacheKey::ImagePath(path.clone());
+                                if let Err(err) = self.state.write().await.cache.set(key, image) {
                                     log::error!("Failed to store image in cache: {}", err);
                                 }
                             }
@@ -153,7 +142,7 @@ impl ImageServer {
     }
 
     /// Start the server
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(&self, mut interrupt_rx: Receiver<Interrupted>) -> Result<()> {
         let addr = self.config.socket_addr()?;
         let listener = TcpListener::bind(addr).await?;
         log::info!("Server running on http://{}", addr);
@@ -169,7 +158,14 @@ impl ImageServer {
         }
 
         loop {
-            let (stream, _) = listener.accept().await?;
+            let (stream, _) = tokio::select! {
+                stream = listener.accept() => stream?,
+                _ = interrupt_rx.recv() => {
+                    log::info!("Received termination signal, shutting down server");
+                    break Ok(());
+                }
+            };
+
             let io = TokioIo::new(stream);
 
             // Clone state for the handler
@@ -196,7 +192,7 @@ impl Default for ImageServer {
     }
 }
 
-fn read_image_from_path(path: &PathBuf) -> Result<cache::CacheValue> {
+pub fn read_image_from_path(path: &PathBuf) -> Result<cache::CacheValue> {
     if !path.exists() || !path.is_file() {
         return Err(anyhow!("Image file does not exist: {}", path.display()));
     }
@@ -218,7 +214,7 @@ fn read_image_from_path(path: &PathBuf) -> Result<cache::CacheValue> {
     })
 }
 
-async fn read_image_from_url(url: &Url) -> Result<cache::CacheValue> {
+pub async fn read_image_from_url(url: &Url) -> Result<cache::CacheValue> {
     let response = reqwest::get(url.as_str())
         .await
         .map_err(|e| anyhow!("Failed to fetch image from URL: {}", e))?;
@@ -234,7 +230,7 @@ async fn read_image_from_url(url: &Url) -> Result<cache::CacheValue> {
         .headers()
         .get("Content-Type")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("application/octet-stream")
+        .ok_or(anyhow!("Failed to get Content-Type header from response"))?
         .to_string();
 
     if !ALLOWED_IMAGE_EXTENSIONS.contains(&content_type.split('/').last().unwrap_or("")) {
@@ -313,12 +309,13 @@ async fn handle_random_image(state: Arc<RwLock<ServerState>>) -> Result<Response
 async fn handle_sequential_image(state: Arc<RwLock<ServerState>>) -> Result<Response<Full<Bytes>>> {
     let mut state = state.write().await;
 
-    if state.sources.is_empty() {
+    if state.cache.is_empty() {
         return Err(anyhow!("No image sources configured"));
     }
 
-    let source = state.sources[state.current_index].clone();
-    state.current_index = (state.current_index + 1) % state.sources.len();
+    let current_index = state.current_index % state.cache.size();
+    let source = state.cache.keys()[current_index].clone();
+    state.current_index = (current_index + 1) % state.cache.size();
 
     // Fetch the image from the cache or source
     match state.cache.get(source.clone()) {
@@ -331,6 +328,9 @@ async fn handle_sequential_image(state: Arc<RwLock<ServerState>>) -> Result<Resp
                 .insert(hyper::header::CONTENT_TYPE, image.content_type.parse()?);
             Ok(response)
         }
-        None => Err(anyhow!("Image not found in cache")),
+        None => {
+            state.cache.remove(&source);
+            Err(anyhow!("Image not found in cache"))
+        }
     }
 }
