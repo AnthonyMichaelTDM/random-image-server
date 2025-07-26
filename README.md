@@ -17,9 +17,7 @@ The configuration file should have the following structure:
 [server]
 port = 8080 # The port the server will listen on
 host = "0.0.0.0" # The host the server will bind to
-mode = "random" # The mode the server will run in, can be "random" or "sequential"
 log_level = "info" # The log level for the server, can be "error", "warn", "info", "debug", or "trace"
-log_file = "server.log" # The file to log to, if not specified, logs will be printed to stdout
 sources = [
     "/path/to/image.jpg", 
     "/path/to/another/image.png",

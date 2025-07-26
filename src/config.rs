@@ -1,12 +1,14 @@
 use std::{net::SocketAddr, path::PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use url::Url;
 
 /// Configuration structure for the server
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub server: ServerConfig,
+    #[serde(default)]
+    pub cache: CacheConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -15,7 +17,6 @@ pub struct ServerConfig {
     #[serde(deserialize_with = "deserialize_host")]
     pub host: url::Host,
     pub log_level: LogLevel,
-    pub log_file: Option<String>,
     #[serde(deserialize_with = "deserialize_sources")]
     pub sources: Vec<ImageSource>,
 }
@@ -28,7 +29,7 @@ where
     url::Host::parse(&s).map_err(serde::de::Error::custom)
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     Trace,
@@ -43,6 +44,19 @@ pub enum LogLevel {
 pub enum ImageSource {
     Url(Url),
     Path(PathBuf),
+}
+
+#[derive(Debug, Default, Deserialize, Clone)]
+pub struct CacheConfig {
+    pub backend: CacheBackendType,
+}
+
+#[derive(Debug, Default, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CacheBackendType {
+    #[default]
+    InMemory,
+    FileSystem,
 }
 
 fn deserialize_sources<'de, D>(deserializer: D) -> Result<Vec<ImageSource>, D::Error>
@@ -80,9 +94,9 @@ impl Default for Config {
                 port: 3000,
                 host: url::Host::Domain("localhost".to_string()),
                 log_level: LogLevel::Info,
-                log_file: None,
                 sources: vec![],
             },
+            cache: CacheConfig::default(),
         }
     }
 }
@@ -113,6 +127,9 @@ mod tests {
             host = "localhost"
             log_level = "info"
             sources = ["./assets/blank.jpg", "https://images.unsplash.com/photo-1502790671504-542ad42d5189?auto=format&fit=crop&w=2560&q=80"]
+
+            [cache]
+            backend = "file_system"
         "#;
         let config: Config = toml::from_str(config_toml).expect("Failed to parse config");
         assert_eq!(config.server.port, 8080);
@@ -123,5 +140,7 @@ mod tests {
         assert_eq!(config.server.sources.len(), 2);
         assert!(matches!(config.server.sources[0], ImageSource::Path(_)));
         assert!(matches!(config.server.sources[1], ImageSource::Url(_)));
+
+        assert_eq!(config.cache.backend, CacheBackendType::FileSystem);
     }
 }

@@ -18,6 +18,9 @@ pub trait CacheBackend: std::fmt::Debug + Send + Sync {
     /// Store an image in the cache with its URL
     fn set(&mut self, key: CacheKey, image: CacheValue) -> Result<(), String>;
 
+    /// Get the size of the cache
+    fn size(&self) -> usize;
+
     /// Clear the cache
     fn clear(&mut self) -> Result<(), String>;
 }
@@ -71,6 +74,10 @@ impl CacheBackend for InMemoryCache {
     fn set(&mut self, key: CacheKey, image: CacheValue) -> Result<(), String> {
         self.cache.insert(key, image);
         Ok(())
+    }
+
+    fn size(&self) -> usize {
+        self.cache.len()
     }
 
     fn clear(&mut self) -> Result<(), String> {

@@ -34,7 +34,8 @@ async fn main() -> Result<()> {
         Config::default()
     });
 
-    // TODO: Initialize logging based on config
+    // Initialize logging based on config
+    random_image_server::init_logging(config.server.log_level)?;
 
     // Create and start the server
     let server = ImageServer::with_config(config);

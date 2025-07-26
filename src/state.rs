@@ -1,4 +1,4 @@
-use std::{fmt::Debug, sync::Mutex};
+use std::fmt::Debug;
 
 use crate::cache::{CacheBackend, CacheKey};
 
@@ -12,7 +12,7 @@ pub struct ServerState {
     pub cache: Box<dyn CacheBackend>,
 
     /// What is the current index (for sequential image serving)
-    pub current_index: Mutex<usize>,
+    pub current_index: usize,
 }
 
 impl Default for ServerState {
@@ -20,7 +20,7 @@ impl Default for ServerState {
         Self {
             sources: vec![],
             cache: Box::new(crate::cache::InMemoryCache::new()),
-            current_index: Mutex::new(0),
+            current_index: 0,
         }
     }
 }
