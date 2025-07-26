@@ -6,14 +6,14 @@ use serde::Deserialize;
 use url::Url;
 
 /// Configuration structure for the server
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct Config {
     pub server: ServerConfig,
     #[serde(default)]
     pub cache: CacheConfig,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct ServerConfig {
     pub port: u16,
     #[serde(deserialize_with = "deserialize_host")]
@@ -40,13 +40,13 @@ where
     LevelFilter::from_str(&level).map_err(serde::de::Error::custom)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImageSource {
     Url(Url),
     Path(PathBuf),
 }
 
-#[derive(Debug, Default, Deserialize, Clone)]
+#[derive(Debug, Default, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub struct CacheConfig {
     pub backend: CacheBackendType,
 }
@@ -193,7 +193,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
+    use pretty_assertions::{assert_eq, assert_str_eq};
     use rstest::rstest;
     use std::fs;
     use tempdir::TempDir;
@@ -295,48 +295,38 @@ mod tests {
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_log_level_deserialization() {
-        let trace_toml = r#"
+    #[rstest]
+    #[case("trace", LevelFilter::Trace)]
+    #[case("debug", LevelFilter::Debug)]
+    #[case("info", LevelFilter::Info)]
+    #[case("warn", LevelFilter::Warn)]
+    #[case("error", LevelFilter::Error)]
+    #[case("off", LevelFilter::Off)]
+    fn test_log_level_deserialization(#[case] level: &str, #[case] expected: LevelFilter) {
+        let trace_toml = &format!(
+            r#"
             [server]
             port = 3000
             host = "localhost"
-            log_level = "trace"
+            log_level = "{level}"
             sources = [
                 "https://example.com/image.jpg",
             ]
-        "#;
+            "#
+        );
         let config: Config = toml::from_str(trace_toml).unwrap();
-        assert!(matches!(config.server.log_level, LevelFilter::Trace));
-
-        let error_toml = r#"
-            [server]
-            port = 3000
-            host = "localhost"
-            log_level = "error"
-            sources = [
-                "https://example.com/image.jpg",
-            ]
-        "#;
-        let config: Config = toml::from_str(error_toml).unwrap();
-        assert!(matches!(config.server.log_level, LevelFilter::Error));
-
-        let off_toml = r#"
-            [server]
-            port = 3000
-            host = "localhost"
-            log_level = "off"
-            sources = [
-                "https://example.com/image.jpg",
-            ]
-        "#;
-        let config: Config = toml::from_str(off_toml).unwrap();
-        assert!(matches!(config.server.log_level, LevelFilter::Off));
+        assert_eq!(config.server.log_level, expected);
     }
 
-    #[test]
-    fn test_cache_backend_deserialization() {
-        let in_memory_toml = r#"
+    #[rstest]
+    #[case("in_memory", CacheBackendType::InMemory)]
+    #[case("file_system", CacheBackendType::FileSystem)]
+    fn test_cache_backend_deserialization(
+        #[case] backend: &str,
+        #[case] expected: CacheBackendType,
+    ) {
+        let in_memory_toml = &format!(
+            r#"
             [server]
             port = 3000
             host = "localhost"
@@ -346,43 +336,29 @@ mod tests {
             ]
 
             [cache]
-            backend = "in_memory"
-        "#;
+            backend = "{backend}"
+            "#
+        );
         let config: Config = toml::from_str(in_memory_toml).unwrap();
-        assert_eq!(config.cache.backend, CacheBackendType::InMemory);
-
-        let file_system_toml = r#"
-            [server]
-            port = 3000
-            host = "localhost"
-            log_level = "info"
-            sources = [
-                "https://example.com/image.jpg",
-            ]
-
-            [cache]
-            backend = "file_system"
-        "#;
-        let config: Config = toml::from_str(file_system_toml).unwrap();
-        assert_eq!(config.cache.backend, CacheBackendType::FileSystem);
+        assert_eq!(config.cache.backend, expected);
     }
 
     #[test]
-    fn test_sources_deserialization_with_existing_path() {
+    fn test_sources_deserialization_path() {
         // Create a temporary file for testing
         let temp_dir = TempDir::new("config_test").unwrap();
         let test_file = temp_dir.path().join("test.jpg");
         fs::write(&test_file, "fake image content").unwrap();
 
+        let test_file = test_file.display();
         let config_toml = format!(
             r#"
             [server]
             port = 3000
             host = "localhost"
             log_level = "info"
-            sources = ["{}"]
-            "#,
-            test_file.to_str().unwrap()
+            sources = ["{test_file}"]
+            "#
         );
 
         let config: Config = toml::from_str(&config_toml).unwrap();
@@ -390,71 +366,42 @@ mod tests {
         assert!(matches!(config.server.sources[0], ImageSource::Path(_)));
     }
 
-    #[test]
-    fn test_sources_deserialization_with_url() {
-        let config_toml = r#"
+    #[rstest]
+    #[case::path(r#"["./assets/blank.jpg"]"#, Ok(vec![ImageSource::Path(PathBuf::from("./assets/blank.jpg").canonicalize().unwrap())]))]
+    #[case::url(r#"["https://example.com/image.jpg"]"#, Ok(vec![ImageSource::Url(Url::parse("https://example.com/image.jpg").unwrap())]))]
+    #[case::empty(r#"[]"#, Err("No valid image sources found"))]
+    #[case::invalid(
+        r#"["/nonexistent/path.jpg", "not-a-url"]"#,
+        Err("No valid image sources found")
+    )]
+    #[case::wrong_type(
+        r#""not-a-list""#,
+        Err("invalid type: string \"not-a-list\", expected a sequence")
+    )]
+    fn test_sources_deserialization(
+        #[case] sources: &str,
+        #[case] expected: Result<Vec<ImageSource>, &str>,
+    ) {
+        let config_toml = format!(
+            r#"
             [server]
             port = 3000
             host = "localhost"
             log_level = "info"
-            sources = ["https://example.com/image.jpg"]
-        "#;
+            sources = {sources}
+            "#,
+        );
 
-        let config: Config = toml::from_str(config_toml).unwrap();
-        assert_eq!(config.server.sources.len(), 1);
-        assert!(matches!(config.server.sources[0], ImageSource::Url(_)));
-    }
-
-    #[test]
-    fn test_sources_deserialization_empty_sources_error() {
-        let config_toml = r#"
-            [server]
-            port = 3000
-            host = "localhost"
-            log_level = "info"
-            sources = []
-        "#;
-
-        let result: Result<Config, _> = toml::from_str(config_toml);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_sources_deserialization_invalid_sources() {
-        let config_toml = r#"
-            [server]
-            port = 3000
-            host = "localhost"
-            log_level = "info"
-            sources = ["/nonexistent/path.jpg", "not-a-url"]
-        "#;
-
-        let result: Result<Config, _> = toml::from_str(config_toml);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_image_source_debug() {
-        let url = Url::parse("https://example.com/image.jpg").unwrap();
-        let path = PathBuf::from("/path/to/image.jpg");
-
-        let url_source = ImageSource::Url(url);
-        let path_source = ImageSource::Path(path);
-
-        let url_debug = format!("{url_source:?}");
-        let path_debug = format!("{path_source:?}");
-
-        assert!(url_debug.contains("Url"));
-        assert!(path_debug.contains("Path"));
-    }
-
-    #[test]
-    fn test_config_debug() {
-        let config = Config::default();
-        let debug_output = format!("{config:?}");
-        assert!(debug_output.contains("Config"));
-        assert!(debug_output.contains("server"));
-        assert!(debug_output.contains("cache"));
+        match (toml::from_str::<Config>(&config_toml), expected) {
+            (Ok(config), Ok(expected)) => {
+                assert_eq!(config.server.sources, expected);
+            }
+            (Ok(_), Err(e)) => panic!("Expected an error but got a valid config, expected: {e:?}"),
+            (Err(e), Ok(_)) => panic!("Failed to parse config when it should succeed: {e}"),
+            (Err(err), Err(message)) => {
+                assert_str_eq!(err.message(), message);
+            }
+        }
     }
 
     #[test]
@@ -469,5 +416,84 @@ mod tests {
 
         let result: Result<Config, _> = toml::from_str(config_toml);
         assert!(result.is_err());
+    }
+
+    #[rstest]
+    #[case::none(&[] as &[(&str, &str)], Config::default())]
+    #[case::port(&[("RANDOM_IMAGE_SERVER_PORT", "8080")], Config {
+        server: ServerConfig {
+            port: 8080,
+            ..Config::default().server
+        },
+        ..Config::default()
+    })]
+    #[case::host(&[("RANDOM_IMAGE_SERVER_HOST", "example.com")], Config {
+        server: ServerConfig {
+            host: url::Host::Domain("example.com".to_string()),
+            ..Config::default().server
+        },
+        ..Config::default()
+    })]
+    #[case::log_level(&[("RANDOM_IMAGE_SERVER_LOG_LEVEL", "debug")], Config {
+        server: ServerConfig {
+            log_level: LevelFilter::Debug,
+            ..Config::default().server
+        },
+        ..Config::default()
+    })]
+    #[case::sources(&[("RANDOM_IMAGE_SERVER_SOURCES", "https://example.com/image.jpg,./assets/blank.jpg")], Config {
+        server: ServerConfig {
+            sources: vec![
+                ImageSource::Url(Url::parse("https://example.com/image.jpg").unwrap()),
+                ImageSource::Path(PathBuf::from("./assets/blank.jpg").canonicalize().unwrap()),
+            ],
+            ..Config::default().server
+        },
+        ..Config::default()
+    })]
+    #[case::cache_backend(&[("RANDOM_IMAGE_SERVER_CACHE_BACKEND", "file_system")], Config {
+        cache: CacheConfig {
+            backend: CacheBackendType::FileSystem,
+        },
+        ..Config::default()
+    })]
+    #[rstest]
+    #[case::all(
+        &[
+            ("RANDOM_IMAGE_SERVER_PORT", "8080"),
+            ("RANDOM_IMAGE_SERVER_HOST", "example.com"),
+            ("RANDOM_IMAGE_SERVER_LOG_LEVEL", "debug"),
+            ("RANDOM_IMAGE_SERVER_SOURCES", "https://example.com/image.jpg,./assets/blank.jpg"),
+            ("RANDOM_IMAGE_SERVER_CACHE_BACKEND", "file_system")
+        ],
+        Config {
+            server: ServerConfig {
+                port: 8080,
+                host: url::Host::Domain("example.com".to_string()),
+                log_level: LevelFilter::Debug,
+                sources: vec![
+                    ImageSource::Url(Url::parse("https://example.com/image.jpg").unwrap()),
+                    ImageSource::Path(PathBuf::from("./assets/blank.jpg").canonicalize().unwrap()),
+                ],
+            },
+            cache: CacheConfig {
+                backend: CacheBackendType::FileSystem,
+            },
+        }
+    )]
+    fn test_update_config_from_env(#[case] env_vars: &[(&str, &str)], #[case] expected: Config) {
+        // Set environment variables
+        for (key, value) in env_vars {
+            unsafe { std::env::set_var(key, value) };
+        }
+
+        let config = Config::default().with_env().unwrap();
+
+        assert_eq!(config, expected);
+
+        // Clean up environment variables
+        for (key, _) in env_vars {
+            unsafe { std::env::remove_var(key) };
+        }
     }
 }
