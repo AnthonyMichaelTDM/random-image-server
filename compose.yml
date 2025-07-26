@@ -10,6 +10,6 @@ services:
     volumes:
       # the config file is mounted to the container
       - ./config.toml:/etc/random-image-server/config.toml
-      # you can mount your images wherever, just make sure it's where you point to in the config file
+      # Mount all the local images (and directories) configured in your config file to the container
       - ./assets:/path/to/image/directory
 
