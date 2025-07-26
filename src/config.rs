@@ -128,7 +128,7 @@ impl Config {
     /// # Errors
     ///
     /// Returns an error if the file cannot be read or parsed.
-    pub fn from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_file(path: &str) -> Result<Self> {
         let content = std::fs::read_to_string(path)?;
         let config: Self = toml::from_str(&content)?;
         Ok(config)
@@ -147,11 +147,24 @@ impl Config {
     /// # Errors
     ///
     /// Returns an error if any environment variable is invalid or cannot be parsed.
-    pub fn with_env(mut self) -> Result<Self> {
+    pub fn with_env(self) -> Result<Self> {
+        self.with_env_backend(&crate::env::StdEnvBackend)
+    }
+
+    /// Create a new configuration, with it's values updated from environment variables.
+    ///
+    /// Same as `with_env`, but allows passing a custom environment backend (e.g., for testing).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any environment variable is invalid or cannot be parsed.
+    pub fn with_env_backend(mut self, env: &impl crate::env::EnvBackend) -> Result<Self> {
         macro_rules! set_from_env {
             ($field:expr, $var:literal,  $parse_fn:expr) => {
-                if let Ok(value) = std::env::var(concat!("RANDOM_IMAGE_SERVER_", $var)) {
-                    $field = $parse_fn(&value).map_err(|e| anyhow!(e))?;
+                if let Ok(value) = env.var(concat!("RANDOM_IMAGE_SERVER_", $var)) {
+                    $field = $parse_fn(&value).map_err(|e| {
+                        anyhow!("Failed to parse environment variable '{}': {}", $var, e)
+                    })?
                 }
             };
         }

@@ -22,6 +22,7 @@ pub mod config;
 mod logging;
 pub mod state;
 pub use logging::init_logging;
+pub mod env;
 pub mod termination;
 
 pub const ALLOWED_IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif"];

@@ -3,8 +3,9 @@ use std::path::PathBuf;
 
 use log::LevelFilter;
 use pretty_assertions::{assert_eq, assert_str_eq};
-use random_image_server::config::{
-    CacheBackendType, CacheConfig, Config, ImageSource, ServerConfig,
+use random_image_server::{
+    config::{CacheBackendType, CacheConfig, Config, ImageSource, ServerConfig},
+    env::{EnvBackend, MockEnvBackend},
 };
 use rstest::rstest;
 use tempdir::TempDir;
@@ -290,17 +291,14 @@ fn test_invalid_host_deserialization() {
         }
     )]
 fn test_update_config_from_env(#[case] env_vars: &[(&str, &str)], #[case] expected: Config) {
+    let mut mock_env = MockEnvBackend::default();
+
     // Set environment variables
     for (key, value) in env_vars {
-        unsafe { std::env::set_var(key, value) };
+        mock_env.set_var(key, value);
     }
 
-    let config = Config::default().with_env().unwrap();
+    let config = Config::default().with_env_backend(&mock_env).unwrap();
 
     assert_eq!(config, expected);
-
-    // Clean up environment variables
-    for (key, _) in env_vars {
-        unsafe { std::env::remove_var(key) };
-    }
 }
