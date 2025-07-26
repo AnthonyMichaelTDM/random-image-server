@@ -1,3 +1,6 @@
+[![codecov](https://codecov.io/gh/AnthonyMichaelTDM/random-image-server/graph/badge.svg?token=iqU3gMydit)](https://codecov.io/gh/AnthonyMichaelTDM/random-image-server)
+[![Continuous Integration](https://github.com/AnthonyMichaelTDM/random-image-server/actions/workflows/ci.yml/badge.svg)](https://github.com/AnthonyMichaelTDM/random-image-server/actions/workflows/ci.yml)
+
 # random-image-server
 
 A simple http server that returns a random image from a pre-configured directory.
