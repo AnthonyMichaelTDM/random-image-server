@@ -24,7 +24,7 @@ pub mod state;
 pub use logging::init_logging;
 pub mod termination;
 
-pub const ALLOWED_IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png"];
+pub const ALLOWED_IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif"];
 
 /// The main server structure
 pub struct ImageServer {
@@ -193,7 +193,7 @@ impl ImageServer {
             // Spawn a new task to handle the connection
             if let Err(e) = executor.serve_connection(io, service).await {
                 log::error!("Failed to serve connection: {e}");
-            };
+            }
         }
     }
 }
@@ -279,6 +279,10 @@ pub async fn read_image_from_url(url: &Url) -> Result<cache::CacheValue> {
 }
 
 /// Handle incoming HTTP requests
+///
+/// # Errors
+///
+/// should be Infallible
 pub async fn handle_request(
     req: Request<hyper::body::Incoming>,
     state: Arc<RwLock<ServerState>>,
@@ -314,6 +318,11 @@ pub async fn handle_request(
     }
 }
 
+/// Handle random image serving
+///
+/// # Errors
+///
+/// Returns an error if no images are configured or if the image cannot be found in the cache.
 pub async fn handle_random_image(state: Arc<RwLock<ServerState>>) -> Result<Response<Full<Bytes>>> {
     let state = state.read().await;
 
@@ -336,6 +345,11 @@ pub async fn handle_random_image(state: Arc<RwLock<ServerState>>) -> Result<Resp
     )
 }
 
+/// Handle sequential image serving
+///
+/// # Errors
+///
+/// Returns an error if no images are configured or if the image cannot be found in the cache.
 pub async fn handle_sequential_image(
     state: Arc<RwLock<ServerState>>,
 ) -> Result<Response<Full<Bytes>>> {

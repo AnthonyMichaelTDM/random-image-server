@@ -48,11 +48,11 @@ impl TestState {
                 // Spawn a new task to handle the connection
                 if let Err(e) = executor.serve_connection(io, service).await {
                     log::error!("Failed to serve connection: {e}");
-                };
+                }
             }
         });
 
-        TestState {
+        Self {
             addr,
             join_handle: handle,
         }
@@ -70,7 +70,7 @@ async fn test_one_request() -> TestState {
 async fn test_handle_request_root(#[future] test_one_request: TestState) {
     let TestState { addr, join_handle } = test_one_request.await;
 
-    let response = reqwest::get(format!("http://{}/", addr)).await.unwrap();
+    let response = reqwest::get(format!("http://{addr}/")).await.unwrap();
 
     assert_eq!(response.status(), hyper::StatusCode::OK);
 
@@ -88,7 +88,7 @@ async fn test_handle_request_root(#[future] test_one_request: TestState) {
 async fn test_handle_request_health(#[future] test_one_request: TestState) {
     let TestState { addr, join_handle } = test_one_request.await;
 
-    let response = reqwest::get(format!("http://{}/health", addr))
+    let response = reqwest::get(format!("http://{addr}/health"))
         .await
         .unwrap();
     assert_eq!(response.status(), hyper::StatusCode::OK);
@@ -103,7 +103,7 @@ async fn test_handle_request_health(#[future] test_one_request: TestState) {
 async fn test_handle_request_not_found(#[future] test_one_request: TestState) {
     let TestState { addr, join_handle } = test_one_request.await;
 
-    let response = reqwest::get(format!("http://{}/unknown", addr))
+    let response = reqwest::get(format!("http://{addr}/unknown"))
         .await
         .unwrap();
 
@@ -118,7 +118,7 @@ async fn test_handle_request_not_found(#[future] test_one_request: TestState) {
 async fn test_handle_request_random_image(#[future] test_one_request: TestState) {
     let TestState { addr, join_handle } = test_one_request.await;
 
-    let response = reqwest::get(format!("http://{}/random", addr))
+    let response = reqwest::get(format!("http://{addr}/random"))
         .await
         .unwrap();
 
@@ -128,7 +128,7 @@ async fn test_handle_request_random_image(#[future] test_one_request: TestState)
         response.headers().get("Content-Type").unwrap(),
         "image/jpeg"
     );
-    assert!(response.bytes().await.unwrap().len() > 0);
+    assert!(!response.bytes().await.unwrap().is_empty());
 
     join_handle.await.unwrap();
 }
@@ -139,7 +139,7 @@ async fn test_handle_request_random_image(#[future] test_one_request: TestState)
 async fn test_handle_request_sequential_image(#[future] test_one_request: TestState) {
     let TestState { addr, join_handle } = test_one_request.await;
 
-    let response = reqwest::get(format!("http://{}/sequential", addr))
+    let response = reqwest::get(format!("http://{addr}/sequential"))
         .await
         .unwrap();
 
@@ -149,6 +149,6 @@ async fn test_handle_request_sequential_image(#[future] test_one_request: TestSt
         response.headers().get("Content-Type").unwrap(),
         "image/jpeg"
     );
-    assert!(response.bytes().await.unwrap().len() > 0);
+    assert!(!response.bytes().await.unwrap().is_empty());
     join_handle.await.unwrap();
 }

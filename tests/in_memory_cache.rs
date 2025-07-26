@@ -24,7 +24,7 @@ fn test_set_and_get() {
     assert!(cache.set(key.clone(), value.clone()).is_ok());
     assert_eq!(cache.size(), 1);
     assert!(!cache.is_empty());
-    assert_eq!(cache.get(key.clone()), Some(value));
+    assert_eq!(cache.get(key), Some(value));
 }
 
 #[test]
@@ -120,20 +120,20 @@ fn test_clear() {
 #[test]
 fn test_keys() {
     let mut cache = InMemoryCache::new();
-    let key1 = CacheKey::ImagePath(PathBuf::from("/test/image1.jpg"));
-    let key2 = CacheKey::ImageUrl(Url::parse("https://example.com/image.jpg").unwrap());
+    let k1 = CacheKey::ImagePath(PathBuf::from("/test/image1.jpg"));
+    let k2 = CacheKey::ImageUrl(Url::parse("https://example.com/image.jpg").unwrap());
     let value = CacheValue {
         data: vec![1, 2, 3, 4],
         content_type: "image/jpeg".to_string(),
     };
 
-    cache.set(key1.clone(), value.clone()).unwrap();
-    cache.set(key2.clone(), value).unwrap();
+    cache.set(k1.clone(), value.clone()).unwrap();
+    cache.set(k2.clone(), value).unwrap();
 
     let keys = cache.keys();
     assert_eq!(keys.len(), 2);
-    assert!(keys.contains(&key1));
-    assert!(keys.contains(&key2));
+    assert!(keys.contains(&k1));
+    assert!(keys.contains(&k2));
 }
 
 #[test]

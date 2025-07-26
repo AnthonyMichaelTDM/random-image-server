@@ -372,8 +372,8 @@ mod tests {
         let url_source = ImageSource::Url(url);
         let path_source = ImageSource::Path(path);
 
-        let url_debug = format!("{:?}", url_source);
-        let path_debug = format!("{:?}", path_source);
+        let url_debug = format!("{url_source:?}");
+        let path_debug = format!("{path_source:?}");
 
         assert!(url_debug.contains("Url"));
         assert!(path_debug.contains("Path"));
@@ -382,7 +382,7 @@ mod tests {
     #[test]
     fn test_config_debug() {
         let config = Config::default();
-        let debug_output = format!("{:?}", config);
+        let debug_output = format!("{config:?}");
         assert!(debug_output.contains("Config"));
         assert!(debug_output.contains("server"));
         assert!(debug_output.contains("cache"));
