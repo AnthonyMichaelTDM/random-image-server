@@ -35,7 +35,8 @@ pub struct ImageServer {
 }
 
 impl ImageServer {
-    /// Create a new ImageServer instance with default configuration
+    /// Create a new `ImageServer` instance with default configuration
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: Config::default(),
@@ -43,7 +44,8 @@ impl ImageServer {
         }
     }
 
-    /// Create a new ImageServer instance with custom configuration
+    /// Create a new `ImageServer` instance with custom configuration
+    #[must_use]
     pub fn with_config(config: Config) -> Self {
         Self {
             state: Arc::new(RwLock::new(ServerState::with_config(&config))),
@@ -52,6 +54,10 @@ impl ImageServer {
     }
 
     /// Populate the cache with the configured images
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the image file does not exist, is not a file, or has an unsupported extension.
     pub async fn populate_cache(&self) {
         // This method can be implemented to load images from configured sources
         // and populate the cache. For now, it is a placeholder.
@@ -60,50 +66,54 @@ impl ImageServer {
         for source in &self.config.server.sources {
             match source {
                 ImageSource::Url(url) => {
-                    log::info!("Loading image from URL: {}", url);
+                    log::info!("Loading image from URL: {url}");
                     let key = cache::CacheKey::ImageUrl(url.clone());
                     // fetch the image from the URL and store it in the cache
                     match read_image_from_url(url).await {
                         Ok(image) => {
-                            if let Err(err) = self.state.write().await.cache.set(key.clone(), image)
-                            {
-                                log::error!("Failed to store image in cache: {}", err);
+                            let set_result = self.state.write().await.cache.set(key, image);
+                            if let Err(err) = set_result {
+                                log::error!("Failed to store image in cache: {err}");
                             }
                         }
                         Err(e) => {
-                            log::error!("Failed to read image from URL {}: {}", url, e);
+                            log::error!("Failed to read image from URL {url}: {e}");
                         }
                     }
                 }
                 ImageSource::Path(path) if path.is_file() => {
                     let path = path.canonicalize().unwrap_or_else(|_| {
                         log::warn!("Failed to canonicalize path: {}", path.display());
-                        return path.clone();
+                        path.clone()
                     });
                     if path.extension().is_some_and(|ext| {
                         ALLOWED_IMAGE_EXTENSIONS.contains(&ext.to_string_lossy().as_ref())
                     }) {
                         log::info!("Loading image from file path: {}", path.display());
                         // read the image file from the path and store it in the cache
-                        let image = read_image_from_path(&path).expect("Failed to read image file");
+                        let Ok(image) = read_image_from_path(&path) else {
+                            log::error!("Failed to read image file: {}", path.display());
+                            continue;
+                        };
                         let key = cache::CacheKey::ImagePath(path.clone());
-                        if let Err(err) = self.state.write().await.cache.set(key, image) {
-                            log::error!("Failed to store image in cache: {}", err);
+                        let set_result = self.state.write().await.cache.set(key, image);
+                        if let Err(err) = set_result {
+                            log::error!("Failed to store image in cache: {err}");
                         }
                     } else {
                         log::warn!("Unsupported image file extension: {}", path.display());
-                        continue;
                     }
                 }
                 ImageSource::Path(path) if path.is_dir() => {
                     let path = path.canonicalize().unwrap_or_else(|_| {
                         log::warn!("Failed to canonicalize path: {}", path.display());
-                        return path.clone();
+                        path.clone()
                     });
 
                     log::info!("Loading images from directory: {}", path.display());
                     // Read all image files in the directory and store them in the cache
-                    let walk = walkdir::WalkDir::new(&path)
+                    let mut state = self.state.write().await;
+                    walkdir::WalkDir::new(&path)
                         .into_iter()
                         .filter_map(Result::ok)
                         .filter(|e| e.file_type().is_file())
@@ -111,41 +121,45 @@ impl ImageServer {
                             e.path()
                                 .extension()
                                 .and_then(|ext| ext.to_str())
-                                .map_or(false, |ext| ALLOWED_IMAGE_EXTENSIONS.contains(&ext))
-                        });
-                    for path in walk {
-                        log::info!("Loading image from file: {}", path.path().display());
-                        let path = path.path().to_path_buf();
-                        // read the image file and store it in the cache
-                        match read_image_from_path(&path) {
-                            Ok(image) => {
-                                let key = cache::CacheKey::ImagePath(path.clone());
-                                if let Err(err) = self.state.write().await.cache.set(key, image) {
-                                    log::error!("Failed to store image in cache: {}", err);
+                                .is_some_and(|ext| ALLOWED_IMAGE_EXTENSIONS.contains(&ext))
+                        })
+                        .for_each(|entry| {
+                            let path = entry.path().to_path_buf();
+                            log::info!("Loading image from file: {}", path.display());
+                            // read the image file and store it in the cache
+                            match read_image_from_path(&path) {
+                                Ok(image) => {
+                                    let key = cache::CacheKey::ImagePath(path.clone());
+                                    let set_result = state.cache.set(key, image);
+                                    if let Err(err) = set_result {
+                                        log::error!("Failed to store image in cache: {err}");
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!(
+                                        "Failed to read image from path {}: {e}",
+                                        path.display(),
+                                    );
                                 }
                             }
-                            Err(e) => {
-                                log::error!(
-                                    "Failed to read image from path {}: {}",
-                                    path.display(),
-                                    e
-                                );
-                            }
-                        }
-                    }
+                        });
                 }
-                _ => {
-                    log::warn!("Unsupported image source: {:?}", source);
+                ImageSource::Path(path) => {
+                    log::warn!("Unsupported image path: {}", path.display());
                 }
             }
         }
     }
 
     /// Start the server
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the server fails to start or encounters an unexpected error.
     pub async fn start(&self, mut interrupt_rx: Receiver<Interrupted>) -> Result<()> {
         let addr = self.config.socket_addr()?;
         let listener = TcpListener::bind(addr).await?;
-        log::info!("Server running on http://{}", addr);
+        log::info!("Server running on http://{addr}");
         log::debug!("Configuration: {:?}", self.config);
 
         // Populate the cache with images from configured sources
@@ -179,7 +193,7 @@ impl ImageServer {
                     )
                     .await
                 {
-                    eprintln!("Error serving connection: {:?}", err);
+                    eprintln!("Error serving connection: {err:?}");
                 }
             });
         }
@@ -192,12 +206,19 @@ impl Default for ImageServer {
     }
 }
 
+/// Read an image file from the given path and return it as a `CacheValue`
+///
+/// # Errors
+///
+/// Returns an error if the file does not exist, is not a file, or has an unsupported extension.
 pub fn read_image_from_path(path: &PathBuf) -> Result<cache::CacheValue> {
     if !path.exists() || !path.is_file() {
         return Err(anyhow!("Image file does not exist: {}", path.display()));
     }
-    let ext = path.extension().and_then(|ext| ext.to_str());
-    if ext.is_none() || !ALLOWED_IMAGE_EXTENSIONS.contains(&ext.unwrap()) {
+    let Some(ext) = path.extension().and_then(|ext| ext.to_str()) else {
+        return Err(anyhow!("Image file has no extension: {}", path.display()));
+    };
+    if !ALLOWED_IMAGE_EXTENSIONS.contains(&ext) {
         return Err(anyhow!(
             "Unsupported image file extension: {}",
             path.display()
@@ -206,7 +227,13 @@ pub fn read_image_from_path(path: &PathBuf) -> Result<cache::CacheValue> {
 
     let image_data = fs::read(path).map_err(|e| anyhow!("Failed to read image file: {}", e))?;
     let content_type = mime_guess::from_path(path)
-        .first_or_octet_stream()
+        .first()
+        .ok_or_else(|| {
+            anyhow!(
+                "Failed to determine content type for image file: {}",
+                path.display()
+            )
+        })?
         .to_string();
     Ok(cache::CacheValue {
         data: image_data,
@@ -214,6 +241,11 @@ pub fn read_image_from_path(path: &PathBuf) -> Result<cache::CacheValue> {
     })
 }
 
+/// Fetch an image from a URL and return it as a `CacheValue`
+///
+/// # Errors
+///
+/// Returns an error if the image cannot be fetched or if the content type is unsupported.
 pub async fn read_image_from_url(url: &Url) -> Result<cache::CacheValue> {
     let response = reqwest::get(url.as_str())
         .await
@@ -230,10 +262,10 @@ pub async fn read_image_from_url(url: &Url) -> Result<cache::CacheValue> {
         .headers()
         .get("Content-Type")
         .and_then(|v| v.to_str().ok())
-        .ok_or(anyhow!("Failed to get Content-Type header from response"))?
+        .ok_or_else(|| anyhow!("Failed to get Content-Type header from response"))?
         .to_string();
 
-    if !ALLOWED_IMAGE_EXTENSIONS.contains(&content_type.split('/').last().unwrap_or("")) {
+    if !ALLOWED_IMAGE_EXTENSIONS.contains(&content_type.split('/').next_back().unwrap_or("")) {
         return Err(anyhow!("Unsupported image content type: {}", content_type));
     }
 
@@ -261,7 +293,7 @@ async fn handle_request(
         "/random" => match handle_random_image(state).await {
             Ok(response) => Ok(response),
             Err(err) => {
-                log::error!("Failed to get random image: {}", err);
+                log::error!("Failed to get random image: {err}");
                 let mut not_found = Response::new(Full::new(Bytes::from("Not Found")));
                 *not_found.status_mut() = hyper::StatusCode::NOT_FOUND;
                 Ok(not_found)
@@ -270,7 +302,7 @@ async fn handle_request(
         "/sequential" => match handle_sequential_image(state).await {
             Ok(response) => Ok(response),
             Err(err) => {
-                log::error!("Failed to get sequential image: {}", err);
+                log::error!("Failed to get sequential image: {err}");
                 let mut not_found = Response::new(Full::new(Bytes::from("Not Found")));
                 *not_found.status_mut() = hyper::StatusCode::NOT_FOUND;
                 Ok(not_found)
@@ -318,19 +350,17 @@ async fn handle_sequential_image(state: Arc<RwLock<ServerState>>) -> Result<Resp
     state.current_index = (current_index + 1) % state.cache.size();
 
     // Fetch the image from the cache or source
-    match state.cache.get(source.clone()) {
-        Some(image) => {
-            let body = Full::new(Bytes::from(image.data));
-            let mut response = Response::new(body);
-            *response.status_mut() = hyper::StatusCode::OK;
-            response
-                .headers_mut()
-                .insert(hyper::header::CONTENT_TYPE, image.content_type.parse()?);
-            Ok(response)
-        }
-        None => {
-            state.cache.remove(&source);
-            Err(anyhow!("Image not found in cache"))
-        }
+    if let Some(image) = state.cache.get(source.clone()) {
+        let body = Full::new(Bytes::from(image.data));
+        let mut response = Response::new(body);
+        *response.status_mut() = hyper::StatusCode::OK;
+        response
+            .headers_mut()
+            .insert(hyper::header::CONTENT_TYPE, image.content_type.parse()?);
+        Ok(response)
+    } else {
+        state.cache.remove(&source);
+        drop(state);
+        Err(anyhow!("Image not found in cache"))
     }
 }

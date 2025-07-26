@@ -16,6 +16,10 @@ pub trait CacheBackend: std::fmt::Debug + Send + Sync {
     fn get_random(&self) -> Option<CacheValue>;
 
     /// Store an image in the cache with its key
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the image cannot be stored (e.g. due to size limits), or if the image is invalid
     fn set(&mut self, key: CacheKey, image: CacheValue) -> Result<(), String>;
 
     /// Remove an image from the cache by its key
@@ -33,6 +37,10 @@ pub trait CacheBackend: std::fmt::Debug + Send + Sync {
     fn keys(&self) -> &[CacheKey];
 
     /// Clear the cache
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the cache cannot be cleared.
     fn clear(&mut self) -> Result<(), String>;
 }
 
@@ -77,11 +85,8 @@ impl CacheBackend for InMemoryCache {
 
     fn get_random(&self) -> Option<CacheValue> {
         let keys: Vec<&CacheKey> = self.cache.keys().collect();
-        if let Some(random_key) = keys.choose(&mut rand::rng()) {
-            self.cache.get(random_key).cloned()
-        } else {
-            None
-        }
+        keys.choose(&mut rand::rng())
+            .and_then(|&random_key| self.cache.get(random_key).cloned())
     }
 
     fn set(&mut self, key: CacheKey, image: CacheValue) -> Result<(), String> {
@@ -170,11 +175,9 @@ impl CacheBackend for FileSystemCache {
 
     fn get_random(&self) -> Option<CacheValue> {
         let keys: Vec<&CacheKey> = self.cache.keys().collect();
-        if let Some(random_key) = keys.choose(&mut rand::rng()).cloned() {
-            self.get(random_key.clone())
-        } else {
-            None
-        }
+        keys.choose(&mut rand::rng())
+            .copied()
+            .and_then(|random_key| self.get(random_key.clone()))
     }
 
     fn set(&mut self, key: CacheKey, image: CacheValue) -> Result<(), String> {
@@ -184,19 +187,19 @@ impl CacheBackend for FileSystemCache {
             .join(format!("{}.cache", uuid::Uuid::new_v4()));
         std::fs::write(&file_path, &image.data).map_err(|e| e.to_string())?;
 
-        if !self.keys.contains(&key) {
-            self.keys.push(key.clone());
-        } else {
-            log::warn!("Key already exists in cache: {:?}", key);
+        if self.keys.contains(&key) {
+            log::warn!("Key already exists in cache: {key:?}");
             if let Some(FileSystemCacheValue { path, .. }) = self.cache.get(&key) {
                 fs::remove_file(path).ok();
             }
+        } else {
+            self.keys.push(key.clone());
         }
 
         let hash = md5::compute(&image.data);
-        let hash_str = format!("{:x}", hash);
+        let hash_str = format!("{hash:x}");
 
-        let content_type = image.content_type.clone();
+        let content_type = image.content_type;
 
         self.cache.insert(
             key,

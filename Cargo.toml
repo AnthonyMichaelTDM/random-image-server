@@ -37,3 +37,7 @@ rstest = "0.25.0"
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[profile.tarpaulin]
+inherits = "test"
+opt-level = 0

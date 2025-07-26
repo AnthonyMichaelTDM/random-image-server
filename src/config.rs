@@ -76,7 +76,7 @@ where
                     .map_err(serde::de::Error::custom)?,
             ));
         } else {
-            log::warn!("Unsupported image source: {}", source);
+            log::warn!("Unsupported image source: {source}");
         }
     }
 
@@ -103,13 +103,21 @@ impl Default for Config {
 
 impl Config {
     /// Load configuration from a TOML file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed.
     pub fn from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
-        let config: Config = toml::from_str(&content)?;
+        let config: Self = toml::from_str(&content)?;
         Ok(config)
     }
 
     /// Get the socket address for the server
+    ///
+    /// # Errors
+    ///
+    /// Shouldn't fail unless the host or port is invalid.
     pub fn socket_addr(&self) -> Result<SocketAddr, std::net::AddrParseError> {
         format!("{}:{}", self.server.host, self.server.port).parse()
     }

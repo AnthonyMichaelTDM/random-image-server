@@ -5,21 +5,24 @@ use log::LevelFilter;
 
 use crate::config::LogLevel;
 
-/// Convert our LogLevel enum to log::LevelFilter
+/// Convert our `LogLevel` enum to `log::LevelFilter`
 impl From<LogLevel> for LevelFilter {
     fn from(level: LogLevel) -> Self {
         match level {
-            LogLevel::Trace => LevelFilter::Trace,
-            LogLevel::Debug => LevelFilter::Debug,
-            LogLevel::Info => LevelFilter::Info,
-            LogLevel::Warn => LevelFilter::Warn,
-            LogLevel::Error => LevelFilter::Error,
-            LogLevel::Off => LevelFilter::Off,
+            LogLevel::Trace => Self::Trace,
+            LogLevel::Debug => Self::Debug,
+            LogLevel::Info => Self::Info,
+            LogLevel::Warn => Self::Warn,
+            LogLevel::Error => Self::Error,
+            LogLevel::Off => Self::Off,
         }
     }
 }
 
 /// Initialize the global logger based on configuration
+///
+/// # Errors
+/// Returns an error if the logger cannot be initialized.
 pub fn init_logging(log_level: LogLevel) -> Result<()> {
     let level_filter: LevelFilter = log_level.into();
 
@@ -38,9 +41,9 @@ pub fn init_logging(log_level: LogLevel) -> Result<()> {
             )
         })
         .try_init()
-        .map_err(|e| anyhow!("Failed to initialize stdout logger: {}", e))?;
+        .map_err(|e| anyhow!("Failed to initialize stdout logger: {e}"))?;
 
-    log::info!("Logging initialized: level={:?}", log_level);
+    log::info!("Logging initialized: level={log_level:?}");
 
     Ok(())
 }

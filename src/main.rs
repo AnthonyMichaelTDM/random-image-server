@@ -19,7 +19,19 @@ async fn main() -> Result<()> {
             eprintln!("Usage: {} [config_file]", args[0]);
             return Ok(());
         }
-        if args[1].ends_with(".toml") {
+        let path = std::path::Path::new(&args[1]);
+        if !path.exists() {
+            eprintln!("Config file does not exist: {}", args[1]);
+            return Ok(());
+        }
+        if !path.is_file() {
+            eprintln!("Config file must be a regular file: {}", args[1]);
+            return Ok(());
+        }
+        if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
+        {
             &args[1]
         } else {
             eprintln!("Config file must be a .toml file");
@@ -31,10 +43,7 @@ async fn main() -> Result<()> {
 
     // Try to load config from file, fall back to default if not found
     let config = Config::from_file(config_file).unwrap_or_else(|e| {
-        eprintln!(
-            "Warning: Could not load config.toml ({}), using defaults",
-            e
-        );
+        eprintln!("Warning: Could not load config.toml ({e}), using defaults");
         Config::default()
     });
 
@@ -48,7 +57,7 @@ async fn main() -> Result<()> {
     let (_terminator, mut interrupt_rx) = create_termination();
 
     if let Err(e) = server.start(interrupt_rx.resubscribe()).await {
-        log::error!("Server encountered an unexpected error: {}", e);
+        log::error!("Server encountered an unexpected error: {e}");
         return Err(e);
     }
 

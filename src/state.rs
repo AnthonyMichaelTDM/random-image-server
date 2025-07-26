@@ -23,20 +23,22 @@ impl Default for ServerState {
 
 impl CacheBackendType {
     /// Create a new cache backend based on the type
+    #[must_use]
     pub fn create_backend(&self) -> Box<dyn CacheBackend> {
         match self {
-            CacheBackendType::InMemory => Box::new(crate::cache::InMemoryCache::new()),
-            CacheBackendType::FileSystem => Box::new(crate::cache::FileSystemCache::new()),
+            Self::InMemory => Box::new(crate::cache::InMemoryCache::new()),
+            Self::FileSystem => Box::new(crate::cache::FileSystemCache::new()),
         }
     }
 }
 
 impl ServerState {
-    /// Create a new ServerState with a specific configuration
+    /// Create a new `ServerState` with a specific configuration
+    #[must_use]
     pub fn with_config(config: &crate::config::Config) -> Self {
-        let mut state: ServerState = Self::default();
-        state.cache = config.cache.backend.create_backend();
-        state.current_index = 0;
-        state
+        Self {
+            cache: config.cache.backend.create_backend(),
+            current_index: 0,
+        }
     }
 }
