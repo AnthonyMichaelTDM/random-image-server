@@ -4,6 +4,9 @@ use rand::prelude::*;
 use url::Url;
 
 pub trait CacheBackend: std::fmt::Debug + Send + Sync {
+    /// report the type of the cache backend
+    fn backend_type(&self) -> &'static str;
+
     /// Create a new cache backend
     fn new() -> Self
     where
@@ -72,6 +75,10 @@ impl Default for InMemoryCache {
 }
 
 impl CacheBackend for InMemoryCache {
+    fn backend_type(&self) -> &'static str {
+        "InMemory"
+    }
+
     fn new() -> Self {
         Self {
             cache: HashMap::new(),
@@ -123,10 +130,10 @@ impl CacheBackend for InMemoryCache {
 }
 
 #[derive(Debug)]
-struct FileSystemCacheValue {
-    path: PathBuf,
-    hash: String,
-    content_type: String,
+pub struct FileSystemCacheValue {
+    pub path: PathBuf,
+    pub hash: String,
+    pub content_type: String,
 }
 
 #[derive(Debug)]
@@ -134,10 +141,14 @@ pub struct FileSystemCache {
     tempdir: tempdir::TempDir,
     keys: Vec<CacheKey>,
     // map of keys to file paths and the hash of the file content
-    cache: HashMap<CacheKey, FileSystemCacheValue>,
+    pub cache: HashMap<CacheKey, FileSystemCacheValue>,
 }
 
 impl CacheBackend for FileSystemCache {
+    fn backend_type(&self) -> &'static str {
+        "FileSystem"
+    }
+
     fn new() -> Self {
         let tempdir =
             tempdir::TempDir::new("random_image_server_cache").expect("Failed to create temp dir");

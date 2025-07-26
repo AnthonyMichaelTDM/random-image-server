@@ -42,3 +42,59 @@ impl ServerState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{CacheBackendType, CacheConfig, Config};
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn test_server_state_default() {
+        let state = ServerState::default();
+        assert_eq!(state.current_index, 0);
+        assert!(state.cache.is_empty());
+    }
+
+    #[test]
+    fn test_server_state_with_config_in_memory() {
+        let config = Config {
+            cache: CacheConfig {
+                backend: CacheBackendType::InMemory,
+            },
+            ..Config::default()
+        };
+        let state = ServerState::with_config(&config);
+        assert_eq!(state.cache.backend_type(), "InMemory");
+        assert_eq!(state.current_index, 0);
+        assert!(state.cache.is_empty());
+    }
+
+    #[test]
+    fn test_server_state_with_config_file_system() {
+        let config = Config {
+            cache: CacheConfig {
+                backend: CacheBackendType::FileSystem,
+            },
+            ..Config::default()
+        };
+        let state = ServerState::with_config(&config);
+        assert_eq!(state.cache.backend_type(), "FileSystem");
+        assert_eq!(state.current_index, 0);
+        assert!(state.cache.is_empty());
+    }
+
+    #[test]
+    fn test_cache_backend_type_create_backend_in_memory() {
+        let backend = CacheBackendType::InMemory.create_backend();
+        assert_eq!(backend.size(), 0);
+        assert!(backend.is_empty());
+    }
+
+    #[test]
+    fn test_cache_backend_type_create_backend_file_system() {
+        let backend = CacheBackendType::FileSystem.create_backend();
+        assert_eq!(backend.size(), 0);
+        assert!(backend.is_empty());
+    }
+}

@@ -1,18 +1,16 @@
-use std::convert::Infallible;
-use std::fs;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{convert::Infallible, fs, path::PathBuf, sync::Arc};
 
 use anyhow::{Result, anyhow};
 use http_body_util::Full;
-use hyper::body::Bytes;
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
-use hyper::{Request, Response};
-use hyper_util::rt::TokioIo;
-use tokio::net::TcpListener;
-use tokio::sync::RwLock;
-use tokio::sync::broadcast::Receiver;
+use hyper::{Request, Response, body::Bytes, service::service_fn};
+use hyper_util::{
+    rt::{TokioExecutor, TokioIo},
+    server::conn::auto,
+};
+use tokio::{
+    net::TcpListener,
+    sync::{RwLock, broadcast::Receiver},
+};
 use url::Url;
 
 use crate::config::{Config, ImageSource};
@@ -30,8 +28,8 @@ pub const ALLOWED_IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png"];
 
 /// The main server structure
 pub struct ImageServer {
-    config: Config,
-    state: Arc<RwLock<ServerState>>,
+    pub config: Config,
+    pub state: Arc<RwLock<ServerState>>,
 }
 
 impl ImageServer {
@@ -171,6 +169,8 @@ impl ImageServer {
             ));
         }
 
+        let executor = auto::Builder::new(TokioExecutor::new());
+
         loop {
             let (stream, _) = tokio::select! {
                 stream = listener.accept() => stream?,
@@ -185,17 +185,15 @@ impl ImageServer {
             // Clone state for the handler
             let state = self.state.clone();
 
-            tokio::task::spawn(async move {
-                if let Err(err) = http1::Builder::new()
-                    .serve_connection(
-                        io,
-                        service_fn(async |req| handle_request(req, state.clone()).await),
-                    )
-                    .await
-                {
-                    eprintln!("Error serving connection: {err:?}");
-                }
+            let service = service_fn(|req| {
+                let value = state.clone();
+                async move { handle_request(req, value).await }
             });
+
+            // Spawn a new task to handle the connection
+            if let Err(e) = executor.serve_connection(io, service).await {
+                log::error!("Failed to serve connection: {e}");
+            };
         }
     }
 }
@@ -281,7 +279,7 @@ pub async fn read_image_from_url(url: &Url) -> Result<cache::CacheValue> {
 }
 
 /// Handle incoming HTTP requests
-async fn handle_request(
+pub async fn handle_request(
     req: Request<hyper::body::Incoming>,
     state: Arc<RwLock<ServerState>>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
@@ -316,7 +314,7 @@ async fn handle_request(
     }
 }
 
-async fn handle_random_image(state: Arc<RwLock<ServerState>>) -> Result<Response<Full<Bytes>>> {
+pub async fn handle_random_image(state: Arc<RwLock<ServerState>>) -> Result<Response<Full<Bytes>>> {
     let state = state.read().await;
 
     // get a random image from the cache
@@ -338,7 +336,9 @@ async fn handle_random_image(state: Arc<RwLock<ServerState>>) -> Result<Response
     )
 }
 
-async fn handle_sequential_image(state: Arc<RwLock<ServerState>>) -> Result<Response<Full<Bytes>>> {
+pub async fn handle_sequential_image(
+    state: Arc<RwLock<ServerState>>,
+) -> Result<Response<Full<Bytes>>> {
     let mut state = state.write().await;
 
     if state.cache.is_empty() {
@@ -362,5 +362,35 @@ async fn handle_sequential_image(state: Arc<RwLock<ServerState>>) -> Result<Resp
         state.cache.remove(&source);
         drop(state);
         Err(anyhow!("Image not found in cache"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::termination::create_termination;
+    use pretty_assertions::assert_eq;
+    use rstest::rstest;
+
+    #[test]
+    fn test_allowed_image_extensions() {
+        assert!(ALLOWED_IMAGE_EXTENSIONS.contains(&"jpg"));
+        assert!(ALLOWED_IMAGE_EXTENSIONS.contains(&"jpeg"));
+        assert!(ALLOWED_IMAGE_EXTENSIONS.contains(&"png"));
+        assert_eq!(ALLOWED_IMAGE_EXTENSIONS.len(), 3);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    #[timeout(std::time::Duration::from_secs(2))]
+    async fn test_start_stop_server() {
+        let mut server = ImageServer::default();
+        let port = 0;
+        server.config.server.port = port;
+        server.config.server.sources = vec![ImageSource::Path(PathBuf::from("assets"))];
+
+        let (mut terminator, interrupt_rx) = create_termination();
+        terminator.terminate(Interrupted::UserInt).unwrap();
+        server.start(interrupt_rx).await.unwrap();
     }
 }

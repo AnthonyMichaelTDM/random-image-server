@@ -11,7 +11,7 @@ license = "GPL-3.0-or-later"
 readme = "README.md"
 
 [dependencies]
-hyper = { version = "1.0", features = ["full"] }
+hyper = { version = "1.0", features = ["server"] }
 hyper-util = { version = "0.1", features = ["full"] }
 tokio = { version = "1.0", features = ["full"] }
 http-body-util = "0.1"
@@ -29,6 +29,7 @@ mime_guess = "2.0.5"
 reqwest = "0.12.22"
 uuid = { version = "1.17.0", features = ["v4"] }
 md5 = "0.8.0"
+pretty_assertions = "1.4.1"
 
 [dev-dependencies]
 rstest = "0.25.0"
@@ -41,3 +42,8 @@ lto = "thin"
 [profile.tarpaulin]
 inherits = "test"
 opt-level = 0
+
+[[bin]]
+name = "random-image-server"
+path = "src/main.rs"
+test = false

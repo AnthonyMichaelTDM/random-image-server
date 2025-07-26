@@ -47,3 +47,18 @@ pub fn init_logging(log_level: LogLevel) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_log_level_to_level_filter_conversion() {
+        assert_eq!(LevelFilter::from(LogLevel::Trace), LevelFilter::Trace);
+        assert_eq!(LevelFilter::from(LogLevel::Debug), LevelFilter::Debug);
+        assert_eq!(LevelFilter::from(LogLevel::Info), LevelFilter::Info);
+        assert_eq!(LevelFilter::from(LogLevel::Warn), LevelFilter::Warn);
+        assert_eq!(LevelFilter::from(LogLevel::Error), LevelFilter::Error);
+        assert_eq!(LevelFilter::from(LogLevel::Off), LevelFilter::Off);
+    }
+}
