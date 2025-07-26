@@ -5,12 +5,6 @@ use log::LevelFilter;
 use serde::Deserialize;
 use url::Url;
 
-const PORT_ENV_VAR: &str = "RANDOM_IMAGE_SERVER_PORT";
-const HOST_ENV_VAR: &str = "RANDOM_IMAGE_SERVER_HOST";
-const LOG_LEVEL_ENV_VAR: &str = "RANDOM_IMAGE_SERVER_LOG_LEVEL";
-const SOURCES_ENV_VAR: &str = "RANDOM_IMAGE_SERVER_SOURCES";
-const CACHE_BACKEND_ENV_VAR: &str = "RANDOM_IMAGE_SERVER_CACHE_BACKEND";
-
 /// Configuration structure for the server
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -65,6 +59,34 @@ pub enum CacheBackendType {
     FileSystem,
 }
 
+impl FromStr for ImageSource {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(url) = Url::parse(s) {
+            Ok(Self::Url(url))
+        } else if PathBuf::from(s).exists() {
+            Ok(Self::Path(PathBuf::from(s).canonicalize()?))
+        } else {
+            Err(anyhow!(
+                "Image source doesn't exist or couldn't be parsed as a URL: {s}"
+            ))
+        }
+    }
+}
+
+impl FromStr for CacheBackendType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "in_memory" => Ok(Self::InMemory),
+            "file_system" => Ok(Self::FileSystem),
+            _ => Err(format!("Unknown cache backend type: {s}")),
+        }
+    }
+}
+
 fn deserialize_sources<'de, D>(deserializer: D) -> Result<Vec<ImageSource>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -73,16 +95,9 @@ where
     let mut image_sources = Vec::new();
 
     for source in sources {
-        if let Ok(url) = Url::parse(&source) {
-            image_sources.push(ImageSource::Url(url));
-        } else if PathBuf::from(&source).exists() {
-            image_sources.push(ImageSource::Path(
-                PathBuf::from(source)
-                    .canonicalize()
-                    .map_err(serde::de::Error::custom)?,
-            ));
-        } else {
-            log::warn!("Unsupported image source: {source}");
+        match ImageSource::from_str(&source) {
+            Ok(image_source) => image_sources.push(image_source),
+            Err(e) => log::warn!("Invalid image source '{source}': {e}"),
         }
     }
 
@@ -119,6 +134,52 @@ impl Config {
         Ok(config)
     }
 
+    /// Create a new configuration, with it's values updated from environment variables
+    ///
+    /// This function reads environment variables prefixed with `RANDOM_IMAGE_SERVER_`
+    /// and updates the configuration accordingly. It supports the following variables:
+    /// - `RANDOM_IMAGE_SERVER_PORT`: The port for the server
+    /// - `RANDOM_IMAGE_SERVER_HOST`: The host for the server
+    /// - `RANDOM_IMAGE_SERVER_LOG_LEVEL`: The log level for the server
+    /// - `RANDOM_IMAGE_SERVER_SOURCES`: A comma-separated list of image sources (URLs or paths)
+    /// - `RANDOM_IMAGE_SERVER_CACHE_BACKEND`: The cache backend type, either `in_memory` or `file_system`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any environment variable is invalid or cannot be parsed.
+    pub fn with_env(mut self) -> Result<Self> {
+        macro_rules! set_from_env {
+            ($field:expr, $var:literal,  $parse_fn:expr) => {
+                if let Ok(value) = std::env::var(concat!("RANDOM_IMAGE_SERVER_", $var)) {
+                    $field = $parse_fn(&value).map_err(|e| anyhow!(e))?;
+                }
+            };
+        }
+
+        set_from_env!(self.server.port, "PORT", u16::from_str);
+        set_from_env!(self.server.host, "HOST", url::Host::parse);
+        set_from_env!(self.server.log_level, "LOG_LEVEL", LevelFilter::from_str);
+        set_from_env!(self.server.sources, "SOURCES", |s: &str| {
+            s.split(',')
+                .map(ImageSource::from_str)
+                .collect::<Result<Vec<_>, _>>()
+                .and_then(|sources| {
+                    if sources.is_empty() {
+                        Err(anyhow!("No valid image sources found"))
+                    } else {
+                        Ok(sources)
+                    }
+                })
+        });
+        set_from_env!(
+            self.cache.backend,
+            "CACHE_BACKEND",
+            CacheBackendType::from_str
+        );
+
+        Ok(self)
+    }
+
     /// Get the socket address for the server
     ///
     /// # Errors
@@ -132,6 +193,8 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
+    use rstest::rstest;
     use std::fs;
     use tempdir::TempDir;
 

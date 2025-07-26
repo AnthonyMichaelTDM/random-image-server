@@ -46,6 +46,7 @@ async fn main() -> Result<()> {
         eprintln!("Warning: Could not load config.toml ({e}), using defaults");
         Config::default()
     });
+    let config = config.with_env()?;
 
     // Initialize logging based on config
     random_image_server::init_logging(config.server.log_level)?;
