@@ -1,7 +1,15 @@
-use std::{net::SocketAddr, path::PathBuf};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 
+use anyhow::{Result, anyhow};
+use log::LevelFilter;
 use serde::Deserialize;
 use url::Url;
+
+const PORT_ENV_VAR: &str = "RANDOM_IMAGE_SERVER_PORT";
+const HOST_ENV_VAR: &str = "RANDOM_IMAGE_SERVER_HOST";
+const LOG_LEVEL_ENV_VAR: &str = "RANDOM_IMAGE_SERVER_LOG_LEVEL";
+const SOURCES_ENV_VAR: &str = "RANDOM_IMAGE_SERVER_SOURCES";
+const CACHE_BACKEND_ENV_VAR: &str = "RANDOM_IMAGE_SERVER_CACHE_BACKEND";
 
 /// Configuration structure for the server
 #[derive(Debug, Deserialize)]
@@ -16,7 +24,8 @@ pub struct ServerConfig {
     pub port: u16,
     #[serde(deserialize_with = "deserialize_host")]
     pub host: url::Host,
-    pub log_level: LogLevel,
+    #[serde(deserialize_with = "deserialize_log_level")]
+    pub log_level: LevelFilter,
     #[serde(deserialize_with = "deserialize_sources")]
     pub sources: Vec<ImageSource>,
 }
@@ -29,15 +38,12 @@ where
     url::Host::parse(&s).map_err(serde::de::Error::custom)
 }
 
-#[derive(Debug, Deserialize, Clone, Copy)]
-#[serde(rename_all = "lowercase")]
-pub enum LogLevel {
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-    Off,
+fn deserialize_log_level<'de, D>(deserializer: D) -> Result<LevelFilter, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let level: String = Deserialize::deserialize(deserializer)?;
+    LevelFilter::from_str(&level).map_err(serde::de::Error::custom)
 }
 
 #[derive(Debug, Clone)]
@@ -93,7 +99,7 @@ impl Default for Config {
             server: ServerConfig {
                 port: 3000,
                 host: url::Host::Ipv4([127, 0, 0, 1].into()),
-                log_level: LogLevel::Info,
+                log_level: LevelFilter::Info,
                 sources: vec![],
             },
             cache: CacheConfig::default(),
@@ -162,7 +168,7 @@ mod tests {
             config.server.host,
             url::Host::<String>::Ipv4([127, 0, 0, 1].into())
         );
-        assert!(matches!(config.server.log_level, LogLevel::Info));
+        assert!(matches!(config.server.log_level, LevelFilter::Info));
         assert!(config.server.sources.is_empty());
         assert_eq!(config.cache.backend, CacheBackendType::InMemory);
     }
@@ -205,7 +211,7 @@ mod tests {
         let config = Config::from_file(config_path.to_str().unwrap()).unwrap();
         assert_eq!(config.server.port, 9090);
         assert_eq!(config.server.host.to_string(), "0.0.0.0");
-        assert!(matches!(config.server.log_level, LogLevel::Debug));
+        assert!(matches!(config.server.log_level, LevelFilter::Debug));
         assert_eq!(config.cache.backend, CacheBackendType::InMemory);
     }
 
@@ -238,7 +244,7 @@ mod tests {
             ]
         "#;
         let config: Config = toml::from_str(trace_toml).unwrap();
-        assert!(matches!(config.server.log_level, LogLevel::Trace));
+        assert!(matches!(config.server.log_level, LevelFilter::Trace));
 
         let error_toml = r#"
             [server]
@@ -250,7 +256,7 @@ mod tests {
             ]
         "#;
         let config: Config = toml::from_str(error_toml).unwrap();
-        assert!(matches!(config.server.log_level, LogLevel::Error));
+        assert!(matches!(config.server.log_level, LevelFilter::Error));
 
         let off_toml = r#"
             [server]
@@ -262,7 +268,7 @@ mod tests {
             ]
         "#;
         let config: Config = toml::from_str(off_toml).unwrap();
-        assert!(matches!(config.server.log_level, LogLevel::Off));
+        assert!(matches!(config.server.log_level, LevelFilter::Off));
     }
 
     #[test]
