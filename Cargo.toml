@@ -30,6 +30,7 @@ reqwest = "0.12.22"
 uuid = { version = "1.17.0", features = ["v4"] }
 md5 = "0.8.0"
 pretty_assertions = "1.4.1"
+openssl = { version = "0.10", features = ["vendored"] }
 
 [dev-dependencies]
 rstest = "0.25.0"
