@@ -88,9 +88,7 @@ async fn test_handle_request_root(#[future] test_one_request: TestState) {
 async fn test_handle_request_health(#[future] test_one_request: TestState) {
     let TestState { addr, join_handle } = test_one_request.await;
 
-    let response = reqwest::get(format!("http://{addr}/health"))
-        .await
-        .unwrap();
+    let response = reqwest::get(format!("http://{addr}/health")).await.unwrap();
     assert_eq!(response.status(), hyper::StatusCode::OK);
     assert_eq!(response.text().await.unwrap(), "OK");
 
@@ -118,9 +116,7 @@ async fn test_handle_request_not_found(#[future] test_one_request: TestState) {
 async fn test_handle_request_random_image(#[future] test_one_request: TestState) {
     let TestState { addr, join_handle } = test_one_request.await;
 
-    let response = reqwest::get(format!("http://{addr}/random"))
-        .await
-        .unwrap();
+    let response = reqwest::get(format!("http://{addr}/random")).await.unwrap();
 
     assert_eq!(response.status(), hyper::StatusCode::OK);
     assert!(response.headers().get("Content-Type").is_some());
