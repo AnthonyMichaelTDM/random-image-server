@@ -47,6 +47,8 @@ sources = [
 backend = "file_system" # The type of cache backend to use, can be "in_memory" or "file_system"
 ```
 
+You can also override the configuration using environment variables. The environment variables should be prefixed with `RANDOM_IMAGE_SERVER_`, and the keys should be in uppercase with underscores instead of dots. For example, to set the port, you can use the environment variable `RANDOM_IMAGE_SERVER_PORT`.
+
 ## Installation
 
 follow instructions in the Release page for the latest release, which involves curling a script and piping it to `sh`, or install from crates.io:
@@ -72,7 +74,7 @@ You can build and run the server as a docker container using the provided Docker
   docker compose build
   ```
 
-2. Run the docker container:
+3. Run the docker container:
 
   ```bash
   docker compose up
