@@ -1,0 +1,33 @@
+[Unit]
+Description=Random Image Server
+Documentation=https://github.com/AnthonyMichaelTDM/random-image-server
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+DynamicUser=true
+ExecStart=/usr/local/bin/random-image-server /etc/random-image-server/config.toml
+Restart=always
+RestartSec=5
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Logging configuration - ensures logs go to syslog/journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=random-image-server
+
+[Install]
+WantedBy=multi-user.target

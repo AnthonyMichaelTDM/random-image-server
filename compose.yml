@@ -1,0 +1,15 @@
+services:
+  random-image-server:
+    build:
+      context: ./
+      dockerfile: ./Dockerfile
+    ports:
+      - 8080:8080
+    expose:
+      - 8080
+    volumes:
+      # the config file is mounted to the container
+      - ./config.toml:/etc/random-image-server/config.toml
+      # Mount all the local images (and directories) configured in your config file to the container
+      - ./assets:/path/to/image/directory
+

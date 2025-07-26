@@ -49,8 +49,59 @@ backend = "file_system" # The type of cache backend to use, can be "in_memory" o
 
 ## Installation
 
-follow instructions in the Releases page, or install from crates.io:
+follow instructions in the Release page for the latest release, which involves curling a script and piping it to `sh`, or install from crates.io:
 
 ```bash
 cargo install random-image-server
+```
+
+## Usage
+
+### As a Docker Container
+
+> I don't know how to publish the docker image to a registry without having to pay for it, so you will have to build the image yourself.
+> So, you'll need to clone the repository and build the image yourself.
+
+You can build and run the server as a docker container using the provided Dockerfile and docker-compose file.
+
+1. Make sure to update the `config.toml` file with your desired configuration, and update the `compose.yml` file to mount the configuration file and any image directories you want to serve.
+
+2. Build the docker image:
+
+  ```bash
+  docker compose build
+  ```
+
+2. Run the docker container:
+
+  ```bash
+  docker compose up
+  ```
+
+This will start the server and expose it on port 8080. You can access the server at `http://localhost:8080`.
+
+### As a Systemd Service
+
+After downloading the binary:
+
+1. put the binary in `/usr/local/bin/random-image-server`
+2. download the `random-image-server.service` file from the repo and place it in `/etc/systemd/system/`
+3. place your `config.toml` file in `/etc/random-image-server/config.toml`, and edit it to your liking.
+4. run the following commands to enable and start the service:
+
+```bash
+sudo systemctl enable random-image-server.service
+sudo systemctl start random-image-server.service
+```
+
+You can check the status of the service with:
+
+```bash
+sudo systemctl status random-image-server.service
+```
+
+and view the logs with:
+
+```bash
+sudo journalctl -u random-image-server.service
 ```
