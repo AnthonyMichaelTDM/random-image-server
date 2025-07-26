@@ -67,18 +67,8 @@ cargo install random-image-server
 You can build and run the server as a docker container using the provided Dockerfile and docker-compose file.
 
 1. Make sure to update the `config.toml` file with your desired configuration, and update the `compose.yml` file to mount the configuration file and any image directories you want to serve.
-
-2. Build the docker image:
-
-  ```bash
-  docker compose build
-  ```
-
-3. Run the docker container:
-
-  ```bash
-  docker compose up
-  ```
+2. Build the docker image with `docker compose build`:
+3. Run the docker container with `docker compose up`:
 
 This will start the server and expose it on port 8080. You can access the server at `http://localhost:8080`.
 
