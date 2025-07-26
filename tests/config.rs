@@ -64,31 +64,39 @@ fn test_socket_addr() {
     assert_eq!(addr.ip().to_string(), "127.0.0.1");
 }
 
-#[test]
-fn test_from_file_success() {
+#[rstest]
+#[case::full(
+    "[server]\nport = 9090\nhost = \"0.0.0.0\"\nlog_level = \"debug\"\nsources = [\"./assets/blank.jpg\"]\n[cache]\nbackend = \"file_system\"", 
+    Config {
+        server: ServerConfig {
+            port: 9090,
+            host: url::Host::Ipv4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+            log_level: LevelFilter::Debug,
+            sources: vec![ImageSource::Path(PathBuf::from("./assets/blank.jpg").canonicalize().unwrap())],
+        },
+        cache: CacheConfig {
+            backend: CacheBackendType::FileSystem,
+        },
+    }
+)]
+#[case::minimal(
+    "[server]\nsources = [\"https://example.com/image.jpg\"]",
+    Config {
+        server: ServerConfig {
+            sources: vec![ImageSource::Url(Url::parse("https://example.com/image.jpg").unwrap())],
+            ..ServerConfig::default()
+        },
+        ..Config::default()
+    }
+)]
+fn test_from_file(#[case] content: &str, #[case] expected: Config) {
     let temp_dir = TempDir::new("config_test").unwrap();
     let config_path = temp_dir.path().join("test.toml");
 
-    let config_content = r#"
-            [server]
-            port = 9090
-            host = "0.0.0.0"
-            log_level = "debug"
-            sources = [
-                "./assets/blank.jpg",
-            ]
-
-            [cache]
-            backend = "in_memory"
-        "#;
-
-    fs::write(&config_path, config_content).unwrap();
+    fs::write(&config_path, content).unwrap();
 
     let config = Config::from_file(config_path.to_str().unwrap()).unwrap();
-    assert_eq!(config.server.port, 9090);
-    assert_eq!(config.server.host.to_string(), "0.0.0.0");
-    assert!(matches!(config.server.log_level, LevelFilter::Debug));
-    assert_eq!(config.cache.backend, CacheBackendType::InMemory);
+    assert_eq!(config, expected);
 }
 
 #[test]

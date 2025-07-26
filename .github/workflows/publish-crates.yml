@@ -16,14 +16,6 @@ concurrency:
 jobs:
   crates-io-publish:
     name: Publish to crates.io
-    strategy:
-      matrix:
-        crate:
-          [
-            random-image-server,
-          ]
-      max-parallel: 1
-      fail-fast: false # Continue with other crates even if one fails, this is necessary because not all crates need to be published for any given release
     runs-on: ubuntu-latest
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -41,4 +33,4 @@ jobs:
           shared-key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Publish to crates.io
-        run: cargo publish --package ${{ env.CRATE }} --token=$CARGO_REGISTRY_TOKEN
+        run: cargo publish --token=$CARGO_REGISTRY_TOKEN

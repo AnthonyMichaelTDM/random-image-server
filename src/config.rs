@@ -1,12 +1,20 @@
-use std::{net::SocketAddr, path::PathBuf, str::FromStr};
+use std::{
+    net::{Ipv4Addr, SocketAddr},
+    path::PathBuf,
+    str::FromStr,
+};
 
 use anyhow::{Result, anyhow};
 use log::LevelFilter;
 use serde::Deserialize;
 use url::Url;
 
+const DEFAULT_PORT: u16 = 3000;
+const DEFAULT_HOST: url::Host = url::Host::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
+const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Info;
+
 /// Configuration structure for the server
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Clone, PartialEq, Eq)]
 pub struct Config {
     pub server: ServerConfig,
     #[serde(default)]
@@ -15,13 +23,27 @@ pub struct Config {
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub struct ServerConfig {
+    #[serde(default = "default_port")]
     pub port: u16,
-    #[serde(deserialize_with = "deserialize_host")]
+    #[serde(deserialize_with = "deserialize_host", default = "default_host")]
     pub host: url::Host,
-    #[serde(deserialize_with = "deserialize_log_level")]
+    #[serde(
+        deserialize_with = "deserialize_log_level",
+        default = "default_log_level"
+    )]
     pub log_level: LevelFilter,
     #[serde(deserialize_with = "deserialize_sources")]
     pub sources: Vec<ImageSource>,
+}
+
+const fn default_port() -> u16 {
+    DEFAULT_PORT
+}
+const fn default_host() -> url::Host {
+    DEFAULT_HOST
+}
+const fn default_log_level() -> LevelFilter {
+    DEFAULT_LOG_LEVEL
 }
 
 fn deserialize_host<'de, D>(deserializer: D) -> Result<url::Host, D::Error>
@@ -108,16 +130,13 @@ where
     Ok(image_sources)
 }
 
-impl Default for Config {
+impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            server: ServerConfig {
-                port: 3000,
-                host: url::Host::Ipv4([127, 0, 0, 1].into()),
-                log_level: LevelFilter::Info,
-                sources: vec![],
-            },
-            cache: CacheConfig::default(),
+            port: DEFAULT_PORT,
+            host: DEFAULT_HOST,
+            log_level: DEFAULT_LOG_LEVEL,
+            sources: vec![],
         }
     }
 }
