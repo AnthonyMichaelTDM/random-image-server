@@ -76,9 +76,9 @@ This will start the server and expose it on port 8080. You can access the server
 
 After downloading the binary:
 
-1. put the binary in `/usr/local/bin/random-image-server`
+1. put the binary in `/usr/local/bin/random-image-server` or create a symlink to it in `/usr/local/bin/`
 2. download the `random-image-server.service` file from the repo and place it in `/etc/systemd/system/`
-3. place your `config.toml` file in `/etc/random-image-server/config.toml`, and edit it to your liking.
+3. place your `config.toml` file in `/etc/random-image-server/config.toml` (or create a symlink), and edit it to your liking.
 4. run the following commands to enable and start the service:
 
 ```bash
