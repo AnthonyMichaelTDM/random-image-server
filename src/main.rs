@@ -1,14 +1,16 @@
 use random_image_server::{ImageServer, config::Config};
 
+use anyhow::Result;
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> Result<()> {
     // parse command line arguments
     let args: Vec<String> = std::env::args().collect();
-    if args.len() > 1 {
+    if args.len() > 2 {
         eprintln!("Usage: {} [config_file]", args[0]);
         return Ok(());
     }
-    let config_file = if args.len() > 1 {
+    let config_file = if args.len() == 2 {
         if args[1] == "--help" || args[1] == "-h" {
             eprintln!("Usage: {} [config_file]", args[0]);
             return Ok(());
