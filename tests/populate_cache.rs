@@ -5,7 +5,7 @@ use random_image_server::{
     ImageServer,
     config::{Config, ImageSource},
 };
-use tempdir::TempDir;
+use tempfile::TempDir;
 
 #[tokio::test]
 async fn test_image_server_populate_cache_no_sources() {
@@ -20,7 +20,7 @@ async fn test_image_server_populate_cache_no_sources() {
 
 #[tokio::test]
 async fn test_image_server_populate_cache_with_file() {
-    let temp_dir = TempDir::new("image_test").unwrap();
+    let temp_dir = TempDir::new().unwrap();
     let image_path = temp_dir.path().join("test.jpg");
     let test_data = vec![0xFF, 0xD8, 0xFF]; // JPEG header
     fs::write(&image_path, &test_data).unwrap();
@@ -36,7 +36,7 @@ async fn test_image_server_populate_cache_with_file() {
 
 #[tokio::test]
 async fn test_image_server_populate_cache_with_directory() {
-    let temp_dir = TempDir::new("image_test").unwrap();
+    let temp_dir = TempDir::new().unwrap();
     let image1_path = temp_dir.path().join("test1.jpg");
     let image2_path = temp_dir.path().join("test2.png");
     let text_file_path = temp_dir.path().join("readme.txt");
@@ -57,7 +57,7 @@ async fn test_image_server_populate_cache_with_directory() {
 
 #[tokio::test]
 async fn test_image_server_populate_cache_invalid_file() {
-    let temp_dir = TempDir::new("image_test").unwrap();
+    let temp_dir = TempDir::new().unwrap();
     let text_path = temp_dir.path().join("test.txt");
     fs::write(&text_path, "not an image").unwrap();
 
