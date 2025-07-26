@@ -391,7 +391,9 @@ mod tests {
         assert!(ALLOWED_IMAGE_EXTENSIONS.contains(&"jpg"));
         assert!(ALLOWED_IMAGE_EXTENSIONS.contains(&"jpeg"));
         assert!(ALLOWED_IMAGE_EXTENSIONS.contains(&"png"));
-        assert_eq!(ALLOWED_IMAGE_EXTENSIONS.len(), 3);
+        assert!(ALLOWED_IMAGE_EXTENSIONS.contains(&"webp"));
+        assert!(ALLOWED_IMAGE_EXTENSIONS.contains(&"gif"));
+        assert_eq!(ALLOWED_IMAGE_EXTENSIONS.len(), 5);
     }
 
     #[rstest]
