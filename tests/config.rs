@@ -8,7 +8,7 @@ use random_image_server::{
     env::{EnvBackend, MockEnvBackend},
 };
 use rstest::rstest;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use url::Url;
 
 #[test]
@@ -90,7 +90,7 @@ fn test_socket_addr() {
     }
 )]
 fn test_from_file(#[case] content: &str, #[case] expected: Config) {
-    let temp_dir = TempDir::new("config_test").unwrap();
+    let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("test.toml");
 
     fs::write(&config_path, content).unwrap();
@@ -107,7 +107,7 @@ fn test_from_file_not_found() {
 
 #[test]
 fn test_from_file_invalid_toml() {
-    let temp_dir = TempDir::new("config_test").unwrap();
+    let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("invalid.toml");
 
     fs::write(&config_path, "invalid toml content [[[").unwrap();
@@ -164,7 +164,7 @@ fn test_cache_backend_deserialization(#[case] backend: &str, #[case] expected: C
 #[test]
 fn test_sources_deserialization_path() {
     // Create a temporary file for testing
-    let temp_dir = TempDir::new("config_test").unwrap();
+    let temp_dir = TempDir::new().unwrap();
     let test_file = temp_dir.path().join("test.jpg");
     fs::write(&test_file, "fake image content").unwrap();
 

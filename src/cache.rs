@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fs, path::PathBuf};
 
 use rand::prelude::*;
+use tempfile::TempDir;
 use url::Url;
 
 pub trait CacheBackend: std::fmt::Debug + Send + Sync {
@@ -138,7 +139,7 @@ pub struct FileSystemCacheValue {
 
 #[derive(Debug)]
 pub struct FileSystemCache {
-    tempdir: tempdir::TempDir,
+    tempdir: TempDir,
     keys: Vec<CacheKey>,
     // map of keys to file paths and the hash of the file content
     pub cache: HashMap<CacheKey, FileSystemCacheValue>,
@@ -150,8 +151,7 @@ impl CacheBackend for FileSystemCache {
     }
 
     fn new() -> Self {
-        let tempdir =
-            tempdir::TempDir::new("random_image_server_cache").expect("Failed to create temp dir");
+        let tempdir = TempDir::new().expect("Failed to create temp dir");
         Self {
             tempdir,
             keys: Vec::new(),

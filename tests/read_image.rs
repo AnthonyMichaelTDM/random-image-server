@@ -2,11 +2,11 @@ use std::{fs, path::PathBuf};
 
 use pretty_assertions::assert_eq;
 use random_image_server::read_image_from_path;
-use tempdir::TempDir;
+use tempfile::TempDir;
 
 #[test]
 fn test_read_image_from_path_success() {
-    let temp_dir = TempDir::new("image_test").unwrap();
+    let temp_dir = TempDir::new().unwrap();
     let image_path = temp_dir.path().join("test.jpg");
     let test_data = vec![0xFF, 0xD8, 0xFF]; // JPEG header
     fs::write(&image_path, &test_data).unwrap();
@@ -29,7 +29,7 @@ fn test_read_image_from_path_file_not_found() {
 
 #[test]
 fn test_read_image_from_path_no_extension() {
-    let temp_dir = TempDir::new("image_test").unwrap();
+    let temp_dir = TempDir::new().unwrap();
     let image_path = temp_dir.path().join("test_no_ext");
     fs::write(&image_path, "test data").unwrap();
 
@@ -40,7 +40,7 @@ fn test_read_image_from_path_no_extension() {
 
 #[test]
 fn test_read_image_from_path_unsupported_extension() {
-    let temp_dir = TempDir::new("image_test").unwrap();
+    let temp_dir = TempDir::new().unwrap();
     let image_path = temp_dir.path().join("test.txt");
     fs::write(&image_path, "test data").unwrap();
 
@@ -56,7 +56,7 @@ fn test_read_image_from_path_unsupported_extension() {
 
 #[test]
 fn test_read_image_from_path_directory() {
-    let temp_dir = TempDir::new("image_test").unwrap();
+    let temp_dir = TempDir::new().unwrap();
 
     let result = read_image_from_path(&temp_dir.path().to_path_buf());
     assert!(result.is_err());
@@ -65,7 +65,7 @@ fn test_read_image_from_path_directory() {
 
 #[test]
 fn test_read_image_from_path_different_extensions() {
-    let temp_dir = TempDir::new("image_test").unwrap();
+    let temp_dir = TempDir::new().unwrap();
     let test_data = vec![1, 2, 3, 4];
 
     // Test .jpg
