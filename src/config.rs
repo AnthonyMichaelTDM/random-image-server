@@ -5,13 +5,13 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use log::LevelFilter;
+use tracing::Level;
 use serde::Deserialize;
 use url::Url;
 
 const DEFAULT_PORT: u16 = 3000;
 const DEFAULT_HOST: url::Host = url::Host::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
-const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Info;
+const DEFAULT_LOG_LEVEL: Level = Level::INFO;
 
 /// Configuration structure for the server
 #[derive(Debug, Default, Deserialize, Clone, PartialEq, Eq)]
@@ -31,7 +31,7 @@ pub struct ServerConfig {
         deserialize_with = "deserialize_log_level",
         default = "default_log_level"
     )]
-    pub log_level: LevelFilter,
+    pub log_level: Level,
     #[serde(deserialize_with = "deserialize_sources")]
     pub sources: Vec<ImageSource>,
 }
@@ -42,7 +42,7 @@ const fn default_port() -> u16 {
 const fn default_host() -> url::Host {
     DEFAULT_HOST
 }
-const fn default_log_level() -> LevelFilter {
+const fn default_log_level() -> Level {
     DEFAULT_LOG_LEVEL
 }
 
@@ -54,12 +54,12 @@ where
     url::Host::parse(&s).map_err(serde::de::Error::custom)
 }
 
-fn deserialize_log_level<'de, D>(deserializer: D) -> Result<LevelFilter, D::Error>
+fn deserialize_log_level<'de, D>(deserializer: D) -> Result<Level, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let level: String = Deserialize::deserialize(deserializer)?;
-    LevelFilter::from_str(&level).map_err(serde::de::Error::custom)
+    Level::from_str(&level).map_err(serde::de::Error::custom)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,7 +119,7 @@ where
     for source in sources {
         match ImageSource::from_str(&source) {
             Ok(image_source) => image_sources.push(image_source),
-            Err(e) => log::warn!("Invalid image source '{source}': {e}"),
+            Err(e) => tracing::warn!("Invalid image source '{source}': {e}"),
         }
     }
 
@@ -190,7 +190,7 @@ impl Config {
 
         set_from_env!(self.server.port, "PORT", u16::from_str);
         set_from_env!(self.server.host, "HOST", url::Host::parse);
-        set_from_env!(self.server.log_level, "LOG_LEVEL", LevelFilter::from_str);
+        set_from_env!(self.server.log_level, "LOG_LEVEL", Level::from_str);
         set_from_env!(self.server.sources, "SOURCES", |s: &str| {
             s.split(',')
                 .map(ImageSource::from_str)

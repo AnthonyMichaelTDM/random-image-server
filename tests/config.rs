@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use log::LevelFilter;
+use tracing::Level;
 use pretty_assertions::{assert_eq, assert_str_eq};
 use random_image_server::{
     config::{CacheBackendType, CacheConfig, Config, ImageSource, ServerConfig},
@@ -44,7 +44,7 @@ fn test_config_default() {
         config.server.host,
         url::Host::<String>::Ipv4([127, 0, 0, 1].into())
     );
-    assert!(matches!(config.server.log_level, LevelFilter::Info));
+    assert!(matches!(config.server.log_level, Level::INFO));
     assert!(config.server.sources.is_empty());
     assert_eq!(config.cache.backend, CacheBackendType::InMemory);
 }
@@ -71,7 +71,7 @@ fn test_socket_addr() {
         server: ServerConfig {
             port: 9090,
             host: url::Host::Ipv4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-            log_level: LevelFilter::Debug,
+            log_level: Level::DEBUG,
             sources: vec![ImageSource::Path(PathBuf::from("./assets/blank.jpg").canonicalize().unwrap())],
         },
         cache: CacheConfig {
@@ -117,13 +117,12 @@ fn test_from_file_invalid_toml() {
 }
 
 #[rstest]
-#[case("trace", LevelFilter::Trace)]
-#[case("debug", LevelFilter::Debug)]
-#[case("info", LevelFilter::Info)]
-#[case("warn", LevelFilter::Warn)]
-#[case("error", LevelFilter::Error)]
-#[case("off", LevelFilter::Off)]
-fn test_log_level_deserialization(#[case] level: &str, #[case] expected: LevelFilter) {
+#[case("trace", Level::TRACE)]
+#[case("debug", Level::DEBUG)]
+#[case("info", Level::INFO)]
+#[case("warn", Level::WARN)]
+#[case("error", Level::ERROR)]
+fn test_log_level_deserialization(#[case] level: &str, #[case] expected: Level) {
     let trace_toml = &format!(
         r#"
             [server]
@@ -254,7 +253,7 @@ fn test_invalid_host_deserialization() {
     })]
 #[case::log_level(&[("RANDOM_IMAGE_SERVER_LOG_LEVEL", "debug")], Config {
         server: ServerConfig {
-            log_level: LevelFilter::Debug,
+            log_level: Level::DEBUG,
             ..Config::default().server
         },
         ..Config::default()
@@ -287,7 +286,7 @@ fn test_invalid_host_deserialization() {
             server: ServerConfig {
                 port: 8080,
                 host: url::Host::Domain("example.com".to_string()),
-                log_level: LevelFilter::Debug,
+                log_level: Level::DEBUG,
                 sources: vec![
                     ImageSource::Url(Url::parse("https://example.com/image.jpg").unwrap()),
                     ImageSource::Path(PathBuf::from("./assets/blank.jpg").canonicalize().unwrap()),
