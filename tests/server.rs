@@ -47,7 +47,7 @@ impl TestState {
 
                 // Spawn a new task to handle the connection
                 if let Err(e) = executor.serve_connection(io, service).await {
-                    log::error!("Failed to serve connection: {e}");
+                    tracing::error!("Failed to serve connection: {e}");
                 }
             }
         });

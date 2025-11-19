@@ -58,20 +58,20 @@ async fn main() -> Result<()> {
     let (_terminator, mut interrupt_rx) = create_termination();
 
     if let Err(e) = server.start(interrupt_rx.resubscribe()).await {
-        log::error!("Server encountered an unexpected error: {e}");
+        tracing::error!("Server encountered an unexpected error: {e}");
         return Err(e);
     }
 
     // Wait for termination signal
     if let Ok(reason) = interrupt_rx.recv().await {
         match reason {
-            Interrupted::UserInt => log::info!("exited per user request"),
-            Interrupted::OsSigInt => log::info!("exited because of an os sig int"),
-            Interrupted::OsSigTerm => log::info!("exited because of an os sig term"),
-            Interrupted::OsSigQuit => log::info!("exited because of an os sig quit"),
+            Interrupted::UserInt => tracing::info!("exited per user request"),
+            Interrupted::OsSigInt => tracing::info!("exited because of an os sig int"),
+            Interrupted::OsSigTerm => tracing::info!("exited because of an os sig term"),
+            Interrupted::OsSigQuit => tracing::info!("exited because of an os sig quit"),
         }
     } else {
-        log::error!("exited because of an unexpected error");
+        tracing::error!("exited because of an unexpected error");
     }
 
     Ok(())

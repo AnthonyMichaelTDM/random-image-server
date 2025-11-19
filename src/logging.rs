@@ -1,31 +1,25 @@
-use std::io::Write;
-
 use anyhow::{Result, anyhow};
-use log::LevelFilter;
+use tracing::Level;
+use tracing_subscriber::fmt::format::FmtSpan;
 
-/// Initialize the global logger based on configuration
+/// Initialize the global tracing subscriber based on configuration
 ///
 /// # Errors
-/// Returns an error if the logger cannot be initialized.
-pub fn init_logging(level_filter: LevelFilter) -> Result<()> {
-    // Simple stdout-only logging using env_logger
-    env_logger::Builder::new()
-        .filter_level(level_filter)
-        .format(|buf, record| {
-            writeln!(
-                buf,
-                "{} [{}] [{}:{}] {}",
-                chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.3f"),
-                record.level(),
-                record.file().unwrap_or("unknown"),
-                record.line().unwrap_or(0),
-                record.args()
-            )
-        })
+/// Returns an error if the subscriber cannot be initialized.
+pub fn init_logging(level: Level) -> Result<()> {
+    // Simple stdout-only logging using tracing-subscriber
+    tracing_subscriber::fmt()
+        .with_max_level(level)
+        .with_span_events(FmtSpan::NONE)
+        .with_target(true)
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .with_file(true)
+        .with_line_number(true)
         .try_init()
-        .map_err(|e| anyhow!("Failed to initialize stdout logger: {e}"))?;
+        .map_err(|e| anyhow!("Failed to initialize tracing subscriber: {e}"))?;
 
-    log::info!("Logging initialized: level={level_filter:?}");
+    tracing::info!("Logging initialized: level={level:?}");
 
     Ok(())
 }

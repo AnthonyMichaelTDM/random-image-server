@@ -170,7 +170,7 @@ impl CacheBackend for FileSystemCache {
                 let data = std::fs::read(path).ok()?;
                 // Validate the content type based on the file extension
                 if hash != &format!("{:x}", md5::compute(&data)) {
-                    log::warn!("Hash mismatch for cached file: {}", path.display());
+                    tracing::warn!("Hash mismatch for cached file: {}", path.display());
                     fs::remove_file(path).ok()?;
                     return None;
                 }
@@ -199,7 +199,7 @@ impl CacheBackend for FileSystemCache {
         std::fs::write(&file_path, &image.data).map_err(|e| e.to_string())?;
 
         if self.keys.contains(&key) {
-            log::warn!("Key already exists in cache: {key:?}");
+            tracing::warn!("Key already exists in cache: {key:?}");
             if let Some(FileSystemCacheValue { path, .. }) = self.cache.get(&key) {
                 fs::remove_file(path).ok();
             }

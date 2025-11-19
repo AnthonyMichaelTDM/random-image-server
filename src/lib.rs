@@ -60,56 +60,56 @@ impl ImageServer {
     pub async fn populate_cache(&self) {
         // This method can be implemented to load images from configured sources
         // and populate the cache. For now, it is a placeholder.
-        log::info!("Populating cache with configured images...");
+        tracing::info!("Populating cache with configured images...");
 
         for source in &self.config.server.sources {
             match source {
                 ImageSource::Url(url) => {
-                    log::info!("Loading image from URL: {url}");
+                    tracing::info!("Loading image from URL: {url}");
                     let key = cache::CacheKey::ImageUrl(url.clone());
                     // fetch the image from the URL and store it in the cache
                     match read_image_from_url(url).await {
                         Ok(image) => {
                             let set_result = self.state.write().await.cache.set(key, image);
                             if let Err(err) = set_result {
-                                log::error!("Failed to store image in cache: {err}");
+                                tracing::error!("Failed to store image in cache: {err}");
                             }
                         }
                         Err(e) => {
-                            log::error!("Failed to read image from URL {url}: {e}");
+                            tracing::error!("Failed to read image from URL {url}: {e}");
                         }
                     }
                 }
                 ImageSource::Path(path) if path.is_file() => {
                     let path = path.canonicalize().unwrap_or_else(|_| {
-                        log::warn!("Failed to canonicalize path: {}", path.display());
+                        tracing::warn!("Failed to canonicalize path: {}", path.display());
                         path.clone()
                     });
                     if path.extension().is_some_and(|ext| {
                         ALLOWED_IMAGE_EXTENSIONS.contains(&ext.to_string_lossy().as_ref())
                     }) {
-                        log::info!("Loading image from file path: {}", path.display());
+                        tracing::info!("Loading image from file path: {}", path.display());
                         // read the image file from the path and store it in the cache
                         let Ok(image) = read_image_from_path(&path) else {
-                            log::error!("Failed to read image file: {}", path.display());
+                            tracing::error!("Failed to read image file: {}", path.display());
                             continue;
                         };
                         let key = cache::CacheKey::ImagePath(path.clone());
                         let set_result = self.state.write().await.cache.set(key, image);
                         if let Err(err) = set_result {
-                            log::error!("Failed to store image in cache: {err}");
+                            tracing::error!("Failed to store image in cache: {err}");
                         }
                     } else {
-                        log::warn!("Unsupported image file extension: {}", path.display());
+                        tracing::warn!("Unsupported image file extension: {}", path.display());
                     }
                 }
                 ImageSource::Path(path) if path.is_dir() => {
                     let path = path.canonicalize().unwrap_or_else(|_| {
-                        log::warn!("Failed to canonicalize path: {}", path.display());
+                        tracing::warn!("Failed to canonicalize path: {}", path.display());
                         path.clone()
                     });
 
-                    log::info!("Loading images from directory: {}", path.display());
+                    tracing::info!("Loading images from directory: {}", path.display());
                     // Read all image files in the directory and store them in the cache
                     let mut state = self.state.write().await;
                     walkdir::WalkDir::new(&path)
@@ -124,18 +124,18 @@ impl ImageServer {
                         })
                         .for_each(|entry| {
                             let path = entry.path().to_path_buf();
-                            log::info!("Loading image from file: {}", path.display());
+                            tracing::info!("Loading image from file: {}", path.display());
                             // read the image file and store it in the cache
                             match read_image_from_path(&path) {
                                 Ok(image) => {
                                     let key = cache::CacheKey::ImagePath(path.clone());
                                     let set_result = state.cache.set(key, image);
                                     if let Err(err) = set_result {
-                                        log::error!("Failed to store image in cache: {err}");
+                                        tracing::error!("Failed to store image in cache: {err}");
                                     }
                                 }
                                 Err(e) => {
-                                    log::error!(
+                                    tracing::error!(
                                         "Failed to read image from path {}: {e}",
                                         path.display(),
                                     );
@@ -144,7 +144,7 @@ impl ImageServer {
                         });
                 }
                 ImageSource::Path(path) => {
-                    log::warn!("Unsupported image path: {}", path.display());
+                    tracing::warn!("Unsupported image path: {}", path.display());
                 }
             }
         }
@@ -158,13 +158,13 @@ impl ImageServer {
     pub async fn start(&self, mut interrupt_rx: Receiver<Interrupted>) -> Result<()> {
         let addr = self.config.socket_addr()?;
         let listener = TcpListener::bind(addr).await?;
-        log::info!("Server running on http://{addr}");
-        log::debug!("Configuration: {:?}", self.config);
+        tracing::info!("Server running on http://{addr}");
+        tracing::debug!("Configuration: {:?}", self.config);
 
         // Populate the cache with images from configured sources
         self.populate_cache().await;
         if self.state.read().await.cache.size() == 0 {
-            log::error!("No images found in cache, please check your configuration");
+            tracing::error!("No images found in cache, please check your configuration");
             return Err(anyhow!(
                 "No images found in cache, please check your configuration"
             ));
@@ -176,7 +176,7 @@ impl ImageServer {
             let (stream, _) = tokio::select! {
                 stream = listener.accept() => stream?,
                 _ = interrupt_rx.recv() => {
-                    log::info!("Received termination signal, shutting down server");
+                    tracing::info!("Received termination signal, shutting down server");
                     break Ok(());
                 }
             };
@@ -193,7 +193,7 @@ impl ImageServer {
 
             // Spawn a new task to handle the connection
             if let Err(e) = executor.serve_connection(io, service).await {
-                log::error!("Failed to serve connection: {e}");
+                tracing::error!("Failed to serve connection: {e}");
             }
         }
     }
@@ -296,7 +296,7 @@ pub async fn handle_request(
         "/random" => match handle_random_image(state).await {
             Ok(response) => Ok(response),
             Err(err) => {
-                log::error!("Failed to get random image: {err}");
+                tracing::error!("Failed to get random image: {err}");
                 let mut not_found = Response::new(Full::new(Bytes::from("Not Found")));
                 *not_found.status_mut() = hyper::StatusCode::NOT_FOUND;
                 Ok(not_found)
@@ -305,7 +305,7 @@ pub async fn handle_request(
         "/sequential" => match handle_sequential_image(state).await {
             Ok(response) => Ok(response),
             Err(err) => {
-                log::error!("Failed to get sequential image: {err}");
+                tracing::error!("Failed to get sequential image: {err}");
                 let mut not_found = Response::new(Full::new(Bytes::from("Not Found")));
                 *not_found.status_mut() = hyper::StatusCode::NOT_FOUND;
                 Ok(not_found)
