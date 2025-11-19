@@ -171,31 +171,50 @@ impl ImageServer {
         }
 
         let executor = auto::Builder::new(TokioExecutor::new());
+        let graceful = hyper_util::server::graceful::GracefulShutdown::new();
 
         loop {
-            let (stream, _) = tokio::select! {
-                stream = listener.accept() => stream?,
+            tokio::select! {
+                Ok((stream, _addr)) = listener.accept() => {
+                    let io = TokioIo::new(stream);
+
+                    // Clone state for the handler
+                    let state = self.state.clone();
+                    let service = service_fn(move |req| {
+                        handle_request(req, state.clone())
+                    });
+
+                    // watch this connection
+                    let conn = executor.serve_connection(io, service);
+                    let fut = graceful.watch(conn.into_owned());
+
+                    // Spawn a new task to handle the connection
+                    tokio::spawn(async move {
+                        if let Err(e) = fut.await {
+                            tracing::error!("Failed to serve connection: {e}");
+                        }
+                    });
+                },
+
                 _ = interrupt_rx.recv() => {
+                    drop(listener);
                     tracing::info!("Received termination signal, shutting down server");
-                    break Ok(());
+                    break;
                 }
             };
+        }
 
-            let io = TokioIo::new(stream);
-
-            // Clone state for the handler
-            let state = self.state.clone();
-
-            let service = service_fn(|req| {
-                let value = state.clone();
-                async move { handle_request(req, value).await }
-            });
-
-            // Spawn a new task to handle the connection
-            if let Err(e) = executor.serve_connection(io, service).await {
-                tracing::error!("Failed to serve connection: {e}");
+        // Start the shutdown and wait for any existing connections to close
+        tokio::select! {
+            () = graceful.shutdown() => {
+                tracing::info!("All connections gracefully closed");
+            }
+            () = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+                tracing::warn!("Timed out waiting for all connections to close");
             }
         }
+
+        Ok(())
     }
 }
 
@@ -211,11 +230,12 @@ impl Default for ImageServer {
 ///
 /// Returns an error if the file does not exist, is not a file, or has an unsupported extension.
 pub fn read_image_from_path(path: &PathBuf) -> Result<cache::CacheValue> {
+    let path_display = path.display();
     if !path.exists() || !path.is_file() {
-        return Err(anyhow!("Image file does not exist: {}", path.display()));
+        return Err(anyhow!("Image file does not exist: {path_display}"));
     }
     let Some(ext) = path.extension().and_then(|ext| ext.to_str()) else {
-        return Err(anyhow!("Image file has no extension: {}", path.display()));
+        return Err(anyhow!("Image file has no extension: {path_display}"));
     };
     if !ALLOWED_IMAGE_EXTENSIONS.contains(&ext) {
         return Err(anyhow!(
@@ -224,15 +244,10 @@ pub fn read_image_from_path(path: &PathBuf) -> Result<cache::CacheValue> {
         ));
     }
 
-    let image_data = fs::read(path).map_err(|e| anyhow!("Failed to read image file: {}", e))?;
+    let image_data = fs::read(path).map_err(|e| anyhow!("Failed to read image file: {e}"))?;
     let content_type = mime_guess::from_path(path)
         .first()
-        .ok_or_else(|| {
-            anyhow!(
-                "Failed to determine content type for image file: {}",
-                path.display()
-            )
-        })?
+        .ok_or_else(|| anyhow!("Failed to determine content type for image file: {path_display}"))?
         .to_string();
     Ok(cache::CacheValue {
         data: image_data,
@@ -248,7 +263,7 @@ pub fn read_image_from_path(path: &PathBuf) -> Result<cache::CacheValue> {
 pub async fn read_image_from_url(url: &Url) -> Result<cache::CacheValue> {
     let response = reqwest::get(url.as_str())
         .await
-        .map_err(|e| anyhow!("Failed to fetch image from URL: {}", e))?;
+        .map_err(|e| anyhow!("Failed to fetch image from URL: {e}"))?;
 
     if !response.status().is_success() {
         return Err(anyhow!(
@@ -265,13 +280,13 @@ pub async fn read_image_from_url(url: &Url) -> Result<cache::CacheValue> {
         .to_string();
 
     if !ALLOWED_IMAGE_EXTENSIONS.contains(&content_type.split('/').next_back().unwrap_or("")) {
-        return Err(anyhow!("Unsupported image content type: {}", content_type));
+        return Err(anyhow!("Unsupported image content type: {content_type}"));
     }
 
     let data = response
         .bytes()
         .await
-        .map_err(|e| anyhow!("Failed to read image bytes from response: {}", e))?;
+        .map_err(|e| anyhow!("Failed to read image bytes from response: {e}"))?;
 
     Ok(cache::CacheValue {
         data: data.to_vec(),
