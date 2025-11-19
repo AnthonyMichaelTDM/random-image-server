@@ -207,10 +207,10 @@ impl ImageServer {
         // Start the shutdown and wait for any existing connections to close
         tokio::select! {
             () = graceful.shutdown() => {
-                tracing::info!("all connections gracefully closed");
+                tracing::info!("All connections gracefully closed");
             }
             () = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
-                tracing::warn!("timed out waiting for all connections to close");
+                tracing::warn!("Timed out waiting for all connections to close");
             }
         }
 
