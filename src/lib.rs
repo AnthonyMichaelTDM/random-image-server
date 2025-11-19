@@ -171,31 +171,50 @@ impl ImageServer {
         }
 
         let executor = auto::Builder::new(TokioExecutor::new());
+        let graceful = hyper_util::server::graceful::GracefulShutdown::new();
 
         loop {
-            let (stream, _) = tokio::select! {
-                stream = listener.accept() => stream?,
+            tokio::select! {
+                Ok((stream, _addr)) = listener.accept() => {
+                    let io = TokioIo::new(stream);
+
+                    // Clone state for the handler
+                    let state = self.state.clone();
+                    let service = service_fn(move |req| {
+                        handle_request(req, state.clone())
+                    });
+
+                    // watch this connection
+                    let conn = executor.serve_connection(io, service);
+                    let fut = graceful.watch(conn.into_owned());
+
+                    // Spawn a new task to handle the connection
+                    tokio::spawn(async move {
+                        if let Err(e) = fut.await {
+                            tracing::error!("Failed to serve connection: {e}");
+                        }
+                    });
+                },
+
                 _ = interrupt_rx.recv() => {
+                    drop(listener);
                     tracing::info!("Received termination signal, shutting down server");
-                    break Ok(());
+                    break;
                 }
             };
+        }
 
-            let io = TokioIo::new(stream);
-
-            // Clone state for the handler
-            let state = self.state.clone();
-
-            let service = service_fn(|req| {
-                let value = state.clone();
-                async move { handle_request(req, value).await }
-            });
-
-            // Spawn a new task to handle the connection
-            if let Err(e) = executor.serve_connection(io, service).await {
-                tracing::error!("Failed to serve connection: {e}");
+        // Start the shutdown and wait for any existing connections to close
+        tokio::select! {
+            _ = graceful.shutdown() => {
+                tracing::info!("all connections gracefully closed")
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+                tracing::warn!("timed out waiting for all connections to close");
             }
         }
+
+        Ok(())
     }
 }
 
