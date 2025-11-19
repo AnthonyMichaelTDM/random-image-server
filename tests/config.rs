@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
 
-use tracing::Level;
 use pretty_assertions::{assert_eq, assert_str_eq};
 use random_image_server::{
     config::{CacheBackendType, CacheConfig, Config, ImageSource, ServerConfig},
@@ -9,6 +8,7 @@ use random_image_server::{
 };
 use rstest::rstest;
 use tempfile::TempDir;
+use tracing::Level;
 use url::Url;
 
 #[test]

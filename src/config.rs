@@ -5,8 +5,8 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use tracing::Level;
 use serde::Deserialize;
+use tracing::Level;
 use url::Url;
 
 const DEFAULT_PORT: u16 = 3000;
