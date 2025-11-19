@@ -206,10 +206,10 @@ impl ImageServer {
 
         // Start the shutdown and wait for any existing connections to close
         tokio::select! {
-            _ = graceful.shutdown() => {
-                tracing::info!("all connections gracefully closed")
+            () = graceful.shutdown() => {
+                tracing::info!("all connections gracefully closed");
             }
-            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+            () = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
                 tracing::warn!("timed out waiting for all connections to close");
             }
         }
@@ -230,11 +230,12 @@ impl Default for ImageServer {
 ///
 /// Returns an error if the file does not exist, is not a file, or has an unsupported extension.
 pub fn read_image_from_path(path: &PathBuf) -> Result<cache::CacheValue> {
+    let path_display = path.display();
     if !path.exists() || !path.is_file() {
-        return Err(anyhow!("Image file does not exist: {}", path.display()));
+        return Err(anyhow!("Image file does not exist: {path_display}"));
     }
     let Some(ext) = path.extension().and_then(|ext| ext.to_str()) else {
-        return Err(anyhow!("Image file has no extension: {}", path.display()));
+        return Err(anyhow!("Image file has no extension: {path_display}"));
     };
     if !ALLOWED_IMAGE_EXTENSIONS.contains(&ext) {
         return Err(anyhow!(
@@ -243,15 +244,10 @@ pub fn read_image_from_path(path: &PathBuf) -> Result<cache::CacheValue> {
         ));
     }
 
-    let image_data = fs::read(path).map_err(|e| anyhow!("Failed to read image file: {}", e))?;
+    let image_data = fs::read(path).map_err(|e| anyhow!("Failed to read image file: {e}"))?;
     let content_type = mime_guess::from_path(path)
         .first()
-        .ok_or_else(|| {
-            anyhow!(
-                "Failed to determine content type for image file: {}",
-                path.display()
-            )
-        })?
+        .ok_or_else(|| anyhow!("Failed to determine content type for image file: {path_display}"))?
         .to_string();
     Ok(cache::CacheValue {
         data: image_data,
@@ -267,7 +263,7 @@ pub fn read_image_from_path(path: &PathBuf) -> Result<cache::CacheValue> {
 pub async fn read_image_from_url(url: &Url) -> Result<cache::CacheValue> {
     let response = reqwest::get(url.as_str())
         .await
-        .map_err(|e| anyhow!("Failed to fetch image from URL: {}", e))?;
+        .map_err(|e| anyhow!("Failed to fetch image from URL: {e}"))?;
 
     if !response.status().is_success() {
         return Err(anyhow!(
@@ -284,13 +280,13 @@ pub async fn read_image_from_url(url: &Url) -> Result<cache::CacheValue> {
         .to_string();
 
     if !ALLOWED_IMAGE_EXTENSIONS.contains(&content_type.split('/').next_back().unwrap_or("")) {
-        return Err(anyhow!("Unsupported image content type: {}", content_type));
+        return Err(anyhow!("Unsupported image content type: {content_type}"));
     }
 
     let data = response
         .bytes()
         .await
-        .map_err(|e| anyhow!("Failed to read image bytes from response: {}", e))?;
+        .map_err(|e| anyhow!("Failed to read image bytes from response: {e}"))?;
 
     Ok(cache::CacheValue {
         data: data.to_vec(),

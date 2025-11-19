@@ -160,26 +160,27 @@ impl CacheBackend for FileSystemCache {
     }
 
     fn get(&self, key: CacheKey) -> Option<CacheValue> {
+        let compute_hash = |data: &[u8]| format!("{:x}", md5::compute(data));
+
         if let Some(FileSystemCacheValue {
             path,
             hash,
             content_type,
         }) = self.cache.get(&key)
+            && path.exists()
         {
-            if path.exists() {
-                let data = std::fs::read(path).ok()?;
-                // Validate the content type based on the file extension
-                if hash != &format!("{:x}", md5::compute(&data)) {
-                    tracing::warn!("Hash mismatch for cached file: {}", path.display());
-                    fs::remove_file(path).ok()?;
-                    return None;
-                }
-
-                return Some(CacheValue {
-                    data,
-                    content_type: content_type.clone(),
-                });
+            let data = std::fs::read(path).ok()?;
+            // Validate the content type based on the file extension
+            if hash != &compute_hash(&data) {
+                tracing::warn!("Hash mismatch for cached file: {}", path.display());
+                fs::remove_file(path).ok()?;
+                return None;
             }
+
+            return Some(CacheValue {
+                data,
+                content_type: content_type.clone(),
+            });
         }
         None
     }
@@ -224,16 +225,16 @@ impl CacheBackend for FileSystemCache {
     }
 
     fn remove(&mut self, key: &CacheKey) -> Option<CacheValue> {
-        if let Some(FileSystemCacheValue { path, .. }) = self.cache.remove(key) {
-            if path.exists() {
-                let content_type = mime_guess::from_path(&path)
-                    .first_or_octet_stream()
-                    .to_string();
-                fs::remove_file(&path).ok()?;
+        if let Some(FileSystemCacheValue { path, .. }) = self.cache.remove(key)
+            && path.exists()
+        {
+            let content_type = mime_guess::from_path(&path)
+                .first_or_octet_stream()
+                .to_string();
+            fs::remove_file(&path).ok()?;
 
-                let data = std::fs::read(path).ok()?;
-                return Some(CacheValue { data, content_type });
-            }
+            let data = std::fs::read(path).ok()?;
+            return Some(CacheValue { data, content_type });
         }
         None
     }

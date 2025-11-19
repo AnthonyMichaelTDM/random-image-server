@@ -10,7 +10,7 @@ use tracing::Level;
 use url::Url;
 
 const DEFAULT_PORT: u16 = 3000;
-const DEFAULT_HOST: url::Host = url::Host::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
+const DEFAULT_HOST: url::Host = url::Host::Ipv4(Ipv4Addr::LOCALHOST);
 const DEFAULT_LOG_LEVEL: Level = Level::INFO;
 
 /// Configuration structure for the server
