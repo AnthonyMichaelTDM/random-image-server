@@ -46,7 +46,7 @@ jobs:
           --profile tarpaulin
 
       - name: Upload to codecov.io
-        uses: codecov/codecov-action@v5.4.3
+        uses: codecov/codecov-action@v5.5.1
         with:
           token: ${{secrets.CODECOV_TOKEN}}
           fail_ci_if_error: true
